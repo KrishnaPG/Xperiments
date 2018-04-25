@@ -1,0 +1,12 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+	"files.associations": {
+		"*.vue": "html"
+	},
+	"editor.tabSize": 2,
+	"editor.dragAndDrop": true,
+	"editor.emptySelectionClipboard": false,
+	"editor.insertSpaces": false,
+	"workbench.editor.enablePreview": false,
+	"editor.formatOnPaste": true
+}
