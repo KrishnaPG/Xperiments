@@ -13,7 +13,8 @@
     "bigchaindb-driver": "^4.0.0",
     "bs58": "^4.0.1",
     "buffer": "^5.1.0",
-    "crypto-conditions": "^2.0.1"
+    "crypto-conditions": "^2.0.1",
+    "js-sha3": "^0.7.0"
   },
   "devDependencies": {
     "autoprefixer": "^7.1.2",

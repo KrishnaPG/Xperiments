@@ -10,7 +10,8 @@ const Buffer = require('buffer').Buffer;
 const BigchainDB = require('bigchaindb-driver');
 const base58 = require('bs58');
 const cryptoconditions = require('crypto-conditions');
-const API_PATH = 'https://test.bigchaindb.com/api/v1/'
+const sha3 = require('js-sha3');
+const API_PATH = 'http://94.237.65.242:9984/api/v1/'
 const conn = new BigchainDB.Connection(API_PATH, {
   app_id: '21049ec1',
   app_key: '79a0c993f29ff4ba921ea724a112f6f6'
@@ -20,13 +21,16 @@ const user2 = new BigchainDB.Ed25519Keypair()
 const user3 = new BigchainDB.Ed25519Keypair()
 const creator = new BigchainDB.Ed25519Keypair()
 const receiver = new BigchainDB.Ed25519Keypair();
+const alice = new BigchainDB.Ed25519Keypair();
+const bob = new BigchainDB.Ed25519Keypair();
+const carly = new BigchainDB.Ed25519Keypair();
 const threshold = 2
 const condition1 = BigchainDB.Transaction.makeEd25519Condition(user1.publicKey, false)
 const condition2 = BigchainDB.Transaction.makeEd25519Condition(user2.publicKey, false)
 const condition3 = BigchainDB.Transaction.makeEd25519Condition(user3.publicKey, false)
 
 const thresholdCondition = BigchainDB.Transaction.makeThresholdCondition(threshold, [condition1, condition2, condition3]);
-
+let txCreateAliceSimpleSigned;
 let txSigned;
 export default {
   name: 'App',
@@ -46,7 +50,7 @@ export default {
 
     console.log(thresholdCondition)
     let output = BigchainDB.Transaction.makeOutput(thresholdCondition);
-    output.public_keys = [user1.publicKey, user2.publicKey, user3.publicKey];
+    output.public_keys = [user1.publicKey, user2.publicKey, user3.publicKey];/*
 
     const tx = BigchainDB.Transaction.makeCreateTransaction({
       data: 'payload'
@@ -64,10 +68,27 @@ export default {
         console.log('Create Transaction', txSigned.id, 'accepted')
         this.lastTransactionURI = API_PATH + 'transactions/' + txSigned.id;
         this.lastTransactionId = txSigned.id;
-      })
+      });*/
+
+    const txCreateAliceSimple = BigchainDB.Transaction.makeCreateTransaction(
+      { 'asset': 'bicycle' },
+      { 'purchase_price': '€240' },
+      [
+        BigchainDB.Transaction.makeOutput(BigchainDB.Transaction.makeEd25519Condition(alice.publicKey))
+      ],
+      alice.publicKey
+    );
+    txCreateAliceSimpleSigned = BigchainDB.Transaction.signTransaction(txCreateAliceSimple, alice.privateKey);
+    // Send the transaction off to BigchainDB
+    conn.postTransactionCommit(txCreateAliceSimpleSigned)
+      .then(res => {
+        console.log('Create Transaction', txCreateAliceSimpleSigned.id, 'accepted')
+        this.lastTransactionURI = API_PATH + 'transactions/' + txCreateAliceSimpleSigned.id;
+        this.lastTransactionId = txCreateAliceSimpleSigned.id;
+      });    
   },
   methods: {
-    transfer: function() {
+    transfer: function() { /*
       let createTranfer = BigchainDB.Transaction.makeTransferTransaction(
         [{
           tx: txSigned,
@@ -105,6 +126,13 @@ export default {
       const fulfillmentUri = fulfillment.serializeUri()
       createTranfer.inputs[0].fulfillment = fulfillmentUri
 
+      // Because the addition of crypto conditions, the id for the transaction has to be regenerated
+      delete createTranfer.id
+      createTranfer.id = sha3.sha3_256
+        .create()
+        .update(BigchainDB.Transaction.serializeTransactionIntoCanonicalString(createTranfer))
+        .hex();
+
       conn.postTransactionCommit(createTranfer)
         //.then(() => conn.pollStatusAndFetchTransaction(createTranfer.id))
         .then(res => {
@@ -112,7 +140,76 @@ export default {
           transfTransaction.href = API_PATH + 'transactions/' + createTranfer.id
           transfTransaction.innerText = createTranfer.id
           console.log('Transfer Transaction', createTranfer.id, 'accepted')
-        })      
+        })
+        .catch(err => {
+          console.log("Error [postTransactionCommit(createTranfer)]: ", err);
+        })*/
+
+      const txTransferBob = BigchainDB.Transaction.makeTransferTransaction(
+        // signedTx to transfer and output index
+        [{ tx: txCreateAliceSimpleSigned, output_index: 0 }],
+        [BigchainDB.Transaction.makeOutput(BigchainDB.Transaction.makeEd25519Condition(bob.publicKey))],
+        // metadata
+        { price: '100 euro' }
+      )
+
+      // Sign with alice's private key
+      let txTransferBobSigned = BigchainDB.Transaction.signTransaction(txTransferBob, alice.privateKey)
+      console.log('Posting signed transaction: ', txTransferBobSigned);
+
+      conn.postTransactionCommit(txTransferBobSigned)
+        //.then(() => conn.pollStatusAndFetchTransaction(createTranfer.id))
+        .then(res => {
+          console.log('Create Transaction', txTransferBobSigned.id, 'accepted')
+          this.lastTransactionURI = API_PATH + 'transactions/' + txTransferBobSigned.id;
+          this.lastTransactionId = txTransferBobSigned.id;
+        })
+        .catch(err => {
+          console.log("Error [postTransactionCommit(createTranfer)]: ", err);
+        })         
+        return;
+
+      // Create condition for Alice and Carly
+      let subConditionFrom = BigchainDB.Transaction.makeEd25519Condition(alice.publicKey, false)
+      let subConditionTo = BigchainDB.Transaction.makeEd25519Condition(carly.publicKey, false)
+
+      // Create condition object with threshold and subconditions
+      let condition = BigchainDB.Transaction.makeThresholdCondition(1, [subConditionFrom, subConditionTo])
+
+      // Generate output with condition added
+      let output = BigchainDB.Transaction.makeOutput(condition)
+
+      // Add Carly to the output.public_keys field so she is the owner
+      output.public_keys = [carly.publicKey]
+
+      let transaction = BigchainDB.Transaction.makeTransferTransaction(
+        [{ tx: txCreateAliceSimpleSigned, output_index: 0 }],
+        [output],
+        { 'meta': 'Transfer to new user with conditions' }
+      );
+
+      // Add alice as previous owner
+      transaction.inputs[0].owners_before = [alice.publicKey]
+
+      // Because the addition of crypto conditions, the id for the transaction has to be regenerated
+      delete transaction.id
+      transaction.id = sha3.sha3_256
+        .create()
+        .update(BigchainDB.Transaction.serializeTransactionIntoCanonicalString(transaction))
+        .hex()
+
+      // Alice has to sign this transfer because she is still the owner of the created asset
+      let signedCryptoConditionTx = BigchainDB.Transaction.signTransaction(transaction, alice.privateKey);    
+      conn.postTransactionCommit(signedCryptoConditionTx)
+        //.then(() => conn.pollStatusAndFetchTransaction(createTranfer.id))
+        .then(res => {
+          console.log('Create Transaction', signedCryptoConditionTx.id, 'accepted')
+          this.lastTransactionURI = API_PATH + 'transactions/' + signedCryptoConditionTx.id;
+          this.lastTransactionId = signedCryptoConditionTx.id;
+        })
+        .catch(err => {
+          console.log("Error [postTransactionCommit(createTranfer)]: ", err);
+        })          
     }
   }
 }
