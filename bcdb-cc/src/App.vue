@@ -2,16 +2,19 @@
   <div id="app">
     <v-button @click="transfer">Transfer</v-button>
     <p>Last Transaction: <a :href="lastTransactionURI" target="_blank">{{lastTransactionId}}</a> </p>
+    <hr>
+    <secure-exchange-ui></secure-exchange-ui>
   </div>
 </template>
 
 <script>
+import secureExchangeUi from '@/components/secure-exchange';
 const Buffer = require('buffer').Buffer;
 const BigchainDB = require('bigchaindb-driver');
 const base58 = require('bs58');
 const cryptoconditions = require('crypto-conditions');
 const sha3 = require('js-sha3');
-const API_PATH = 'http://94.237.65.242:9984/api/v1/'
+const API_PATH = 'https://test.bigchaindb.com/api/v1/'
 const conn = new BigchainDB.Connection(API_PATH, {
   app_id: '21049ec1',
   app_key: '79a0c993f29ff4ba921ea724a112f6f6'
@@ -34,6 +37,9 @@ let txCreateAliceSimpleSigned;
 let txSigned;
 export default {
   name: 'App',
+  components: {
+    secureExchangeUi
+  },
   data: function() { 
     return {
       lastTransactionId: null,
