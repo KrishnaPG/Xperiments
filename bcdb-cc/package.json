@@ -16,7 +16,8 @@
     "crypto-conditions": "^2.0.1",
     "js-sha3": "^0.7.0",
     "node-rsa": "^1.0.0",
-    "node-uuid": "^1.4.8"
+    "node-uuid": "^1.4.8",
+    "sjcl": "^1.0.7"
   },
   "devDependencies": {
     "autoprefixer": "^7.1.2",
