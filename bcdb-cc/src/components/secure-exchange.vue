@@ -2,25 +2,47 @@
 	<div>
 		<v-row :gutter="16">
 			<v-col span="12">
-				<h3>Patient</h3>
-				<ul>
-					<li v-for="item in p1RequestHistory">
-						{{item.token}}: {{item.msg}}
-					</li>
-				</ul>
-				<v-input v-model="p1Text" @keyup.enter.native="keyupP1"></v-input>				
+				<h2>Patient</h2>
+				<hr/>
+				<table id="patient">
+					<thead>
+						<tr>
+							<th>Id</th>
+							<th>Msg</th>
+							<th>Response</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="item in p1RequestHistory" :key="item.token">
+							<td>{{item.token}}</td>
+							<td>{{item.msg}}</td>
+							<td><b>{{item.response}}</b></td>
+						</tr>
+					</tbody>
+				</table>
+				<v-input placeholder="" v-model="p1Text" @keyup.enter.native="keyupP1"></v-input>				
 			</v-col>
 			<v-col span="12">
-				<h3>Hospital</h3>
-				<ul>
-					<li v-for="item in h1ReceiveHistory">
-						<v-row :gutter="16">
-							<v-col span="12">{{item.token}}: {{item.msg}}</v-col>
-							
-							<v-col span="12"><v-input v-model="item.response" @keyup.enter.native="keyupH1(item)"></v-input>	</v-col>						
-						</v-row>
-					</li>
-				</ul>
+				<h2>Hospital</h2>
+				<hr/>
+				<table id="hospital">
+					<thead>
+						<tr>
+							<th>Id</th>
+							<th>Msg</th>
+							<th>Response</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="item in h1ReceiveHistory" :key="item.token">
+							<td>{{item.token}}</td>
+							<td>{{item.msg}}</td>
+							<td>
+								<v-input v-model="item.response" @keyup.enter.native="keyupH1(item)"></v-input>
+							</td>
+						</tr>
+					</tbody>
+				</table>	
 			</v-col>
 		</v-row>
 	</div>
@@ -49,16 +71,28 @@
 
 				const receivedObj = ZKP.ASPR.Request.decrypt(sentObj.encryptedMsg, this.h1Key.exportKey('private'));
 				this.h1ReceiveHistory.push(receivedObj);
-
-				// const p1PvtEncrypted = this.p1Key.encryptPrivate(Msg, 'base64');
-				// const h1PubEncrypted = this.h1Key.encrypt(p1PvtEncrypted, 'base64', 'base64');
-				// const h1PvtDecrypted = this.h1Key.decrypt(h1PubEncrypted, 'base64', 'base64');
-				// const p1PubDecrypted = this.p1Key.decryptPublic(h1PvtDecrypted, 'utf8');
 			},
-			keyupH1: function(val) {
-				//this.h1ReceiveHistory.push(this.h1Text);
-				console.log("val: ", val);
+			keyupH1: async function(receivedItem) {
+				const token = receivedItem.token;
+				const sentObj = ZKP.ASPR.Response.encrypt(receivedItem.response, "<sender id>", this.h1Key.exportKey("private"), receivedItem);
+				
+				const requestIndex = _.findIndex(this.p1RequestHistory, h => { return h.token == sentObj.token });
+				const requestObj = this.p1RequestHistory[requestIndex];
+				const TKeyPair = requestObj.keyPair;
+				const receivedObj = await ZKP.ASPR.Response.decrypt(sentObj.encryptedMsg, TKeyPair.exportKey("private"), async (id) => { return this.h1Key.exportKey("public"); });
+				requestObj.response = receivedObj.msg;
+				Vue.set(this.p1RequestHistory, requestIndex, requestObj); // Vue.set() required for array changes to be reactive
 			}
 		}
 	}
 </script>
+<style>
+	table {
+		width: 100%;
+	}
+	table > td {
+		padding: 10px;
+	}
+	table#patient {
+	}
+</style>

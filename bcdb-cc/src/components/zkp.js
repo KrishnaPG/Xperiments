@@ -6,7 +6,6 @@ import { debug } from 'util';
 
 const NodeRSA = require('node-rsa');	
 
-import largeEnDec from './largeEnDec';
 import UID from './uid';
 import largeRSA from './largeRSA';
 
@@ -17,7 +16,7 @@ export default {
 				const TKeyPair = NodeRSA({ b: 512 });	// Temporary Keypair. Anything less than 512 seems to be causing problem !!
 				const senderSignedMsg = largeRSA.encryptPrivate(msg, TKeyPair);
 				const metadata = {
-					v: 'ASPR/v1',
+					v: 'ASPR/req/v1',
 					token: UID.randomID(),
 					pk: TKeyPair.exportKey('public'),
 					payload: senderSignedMsg
@@ -32,7 +31,24 @@ export default {
 			}			
 		},
 		Response: {
-
+			// @param requestObj: same as the return value of ASPR.Request.decrypt()
+			encrypt: function(msg, senderId, senderPrivateKey, requestObj) {
+				const senderSignedMsg = largeRSA.encryptPrivate(msg, new NodeRSA(senderPrivateKey));
+				const metadata = {
+					v: 'ASPR/res/v1',
+					token: requestObj.token,
+					senderId,
+					payload: senderSignedMsg
+				};
+				const encryptedMsg = largeRSA.encryptPublic(JSON.stringify(metadata), new NodeRSA(requestObj.pk));
+				return { token: metadata.token, encryptedMsg };
+			},
+			decrypt: async function(obj, receiverPrivateKey, senderPKFn) {
+				const metadata = JSON.parse(largeRSA.decryptPrivate(obj, new NodeRSA(receiverPrivateKey)));
+				const senderPublicKey = await senderPKFn(metadata.senderId);
+				metadata.msg = largeRSA.decryptPublic(metadata.payload, new NodeRSA(senderPublicKey));
+				return metadata;
+			}
 		}
 	}
 };

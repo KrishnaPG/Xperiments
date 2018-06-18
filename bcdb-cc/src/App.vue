@@ -1,8 +1,8 @@
 <template>
   <div id="app">
-    <v-button @click="transfer">Transfer</v-button>
+    <!-- <v-button @click="transfer">Transfer</v-button>
     <p>Last Transaction: <a :href="lastTransactionURI" target="_blank">{{lastTransactionId}}</a> </p>
-    <hr>
+    <hr> -->
     <secure-exchange-ui></secure-exchange-ui>
   </div>
 </template>
