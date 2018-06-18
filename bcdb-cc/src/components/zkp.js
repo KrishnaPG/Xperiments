@@ -50,5 +50,47 @@ export default {
 				return metadata;
 			}
 		}
-	}
+	},
+	PSPR: {
+		Request: {
+			encrypt: function (msg, senderId, senderPrivateKey, receiverPublicKey) {
+				const senderSignedMsg = largeRSA.encryptPrivate(msg, new NodeRSA(senderPrivateKey));
+				const metadata = {
+					v: 'PSPR/req/v1',
+					token: UID.randomID(),
+					senderId,
+					payload: senderSignedMsg
+				};
+				const encryptedMsg = largeRSA.encryptPublic(JSON.stringify(metadata), new NodeRSA(receiverPublicKey));
+				return { token: metadata.token, encryptedMsg };
+			},
+			decrypt: async function (obj, receiverPrivateKey, senderPKFn) {
+				const metadata = JSON.parse(largeRSA.decryptPrivate(obj, new NodeRSA(receiverPrivateKey)));
+				const senderPublicKey = await senderPKFn(metadata.senderId);				
+				metadata.msg = largeRSA.decryptPublic(metadata.payload, new NodeRSA(senderPublicKey));
+				return metadata;
+			}
+		},
+		Response: {
+			// @param requestObj: same as the return value of ASPR.Request.decrypt()
+			encrypt: async function (msg, senderId, senderPrivateKey, requestObj, receiverPKFn) {
+				const senderSignedMsg = largeRSA.encryptPrivate(msg, new NodeRSA(senderPrivateKey));
+				const metadata = {
+					v: 'PSPR/res/v1',
+					token: requestObj.token,
+					senderId,
+					payload: senderSignedMsg
+				};
+				const receiverPublicKey = await receiverPKFn(requestObj.senderId);
+				const encryptedMsg = largeRSA.encryptPublic(JSON.stringify(metadata), new NodeRSA(receiverPublicKey));
+				return { token: metadata.token, encryptedMsg };
+			},
+			decrypt: async function (obj, receiverPrivateKey, senderPKFn) {
+				const metadata = JSON.parse(largeRSA.decryptPrivate(obj, new NodeRSA(receiverPrivateKey)));
+				const senderPublicKey = await senderPKFn(metadata.senderId);
+				metadata.msg = largeRSA.decryptPublic(metadata.payload, new NodeRSA(senderPublicKey));
+				return metadata;
+			}
+		}
+	}	
 };
