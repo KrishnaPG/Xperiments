@@ -16,7 +16,7 @@
 						<tr v-for="item in p1RequestHistory" :key="item.token">
 							<td>{{item.token}}</td>
 							<td>{{item.msg}}</td>
-							<td><b>{{item.response}}</b></td>
+							<td><b>{{item.response}}</b> <span v-if="item.response"><v-icon type="play-circle" class="action" title="Start Appointment" @click.native="startAppointment(item, item.response)"></v-icon></span></td>
 						</tr>
 					</tbody>
 				</table>
@@ -45,13 +45,20 @@
 				</table>	
 			</v-col>
 		</v-row>
+		<hr/>
+		<otpui></otpui>
 	</div>
 </template>
 <script>
 	const NodeRSA = require('node-rsa');	
+	import otpui from './otp.vue';
 	import ZKP from './zkp.js';
+	import OTP from './otp.js';
 	export default {
 		name: 'secure-exchange-ui',
+		components: {
+			otpui
+		},
 		data: function(){
 			return {
 				p1Text: "",
@@ -82,6 +89,10 @@
 				const receivedObj = await ZKP.ASPR.Response.decrypt(sentObj.encryptedMsg, TKeyPair.exportKey("private"), async (id) => { return this.h1Key.exportKey("public"); });
 				requestObj.response = receivedObj.msg;
 				Vue.set(this.p1RequestHistory, requestIndex, requestObj); // Vue.set() required for array changes to be reactive
+			},
+			startAppointment: async function(p1Request, h1Response) {
+				const otp = await OTP.getNewToken();
+				console.log(h1Response, otp);
 			}
 		}
 	}
@@ -94,5 +105,9 @@
 		padding: 10px;
 	}
 	table#patient {
+	}
+	.action {
+		cursor: pointer;
+		pointer-events: all;
 	}
 </style>

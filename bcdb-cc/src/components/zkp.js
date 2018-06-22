@@ -92,5 +92,13 @@ export default {
 				return metadata;
 			}
 		}
-	}	
+	},
+	SSMR: {
+		Request: {
+			encrypt: function(msg, senderPrivateKey) {}
+		},
+		Response: {
+
+		}
+	}
 };
