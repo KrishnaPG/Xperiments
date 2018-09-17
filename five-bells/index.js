@@ -1,3 +1,19 @@
+
+const ccSDK = new (require("codechain-sdk"))({ server: 'http://52.78.210.78:8080' });
+
+const secret = "ede1d4ccb4ec9a8bbbae9a13db3f4a7b56ea04189be86ac3a6a439d9a0a1addd";
+const passphrase = "satoshi";
+
+ccSDK.rpc.chain.getBestBlockNumber().then(function (num) {
+	console.log(num);
+});
+
+ccSDK.rpc.account.importRaw(secret, passphrase).then(function (account) {
+	console.log(account); // tccqzn9jjm3j6qg69smd7cn0eup4w7z2yu9my9a2k78
+});
+
+return;
+
 const cc = require('five-bells-condition')
 
 // Check a condition for validity
