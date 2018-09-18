@@ -1,0 +1,19 @@
+.summary {
+  .empty-container {
+    height: 100%;
+    padding-top: 30px;
+    display: flex;
+    .empty-icon {
+      width: 130px;
+      height: 130px;
+    }
+  }
+  g > rect {
+    cursor: pointer;
+  }
+  .daily-log-item.block {
+    g > path {
+      cursor: pointer;
+    }
+  }
+}

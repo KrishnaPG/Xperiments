@@ -1,0 +1,104 @@
+@import "../../../mixins.scss";
+@import "../../../variables.scss";
+.header {
+  background-color: $primary-color;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 10000;
+  .header-title {
+    font-weight: 600;
+  }
+  .header-title-container {
+    margin-right: calc(50% - 800px);
+  }
+  @media (max-width: 1600px) {
+    .header-title-container {
+      margin-right: 0;
+    }
+  }
+
+  .select-nework-btn {
+    background-color: $primary-color;
+    border: 1px solid white;
+    color: white !important;
+
+    &:hover {
+      background-color: #7376b9;
+    }
+  }
+  .menu-container {
+    max-width: 1140px;
+  }
+  .logo {
+    height: 35px;
+    width: auto;
+    margin-right: 5px;
+  }
+  .nav-link {
+    color: white !important;
+    cursor: pointer;
+    &:hover {
+      color: $header-text-color !important;
+    }
+  }
+  .dropdown-menu {
+    .dropdown-item {
+      color: $dark-color;
+      &:hover {
+        background-color: $background-gray;
+      }
+    }
+    a.active {
+      background-color: white;
+    }
+  }
+  .header-small {
+    display: none !important;
+  }
+  @include respond-below(sm) {
+    .header-big {
+      display: none !important;
+    }
+    .header-small {
+      display: inline-block !important;
+    }
+  }
+  @include respond-below(md) {
+    .dropdown-menu {
+      background-color: $primary-color;
+      border: none;
+      .dropdown-item {
+        color: white !important;
+        &:hover {
+          background-color: inherit;
+          color: $header-text-color !important;
+        }
+      }
+      a.active {
+        background-color: $primary-color;
+      }
+    }
+  }
+  .loading-bar {
+    background-color: #f2b04c;
+    height: 5px;
+    position: absolute;
+  }
+  .search-for-small-screen {
+    display: none;
+    padding-bottom: 16px;
+  }
+  @include respond-below(md) {
+    .search-for-small-screen {
+      display: flex;
+    }
+    .search-for-large-screen {
+      display: none;
+    }
+  }
+}
+
+.network-description-popover {
+  z-index: 10001;
+}

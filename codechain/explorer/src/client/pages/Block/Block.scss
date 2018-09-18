@@ -1,0 +1,17 @@
+@import "../../mixins.scss";
+@import "../../variables.scss";
+.block {
+  padding-top: 60px;
+  padding-bottom: 100px;
+  .title-container {
+    h1 {
+      .block-number {
+        @include data-font;
+        color: $dark-color;
+      }
+    }
+    .timestamp {
+      @include small-text;
+    }
+  }
+}

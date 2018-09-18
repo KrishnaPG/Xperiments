@@ -1,0 +1,11 @@
+@import "../../mixins.scss";
+@import "../../variables.scss";
+.transaction {
+  padding-top: 60px;
+  padding-bottom: 100px;
+  .title-container {
+    .timestamp {
+      @include small-text;
+    }
+  }
+}

@@ -1,16 +1,34 @@
 
-const ccSDK = new (require("codechain-sdk"))({ server: 'http://52.78.210.78:8080' });
+const ccSDK = new (require("codechain-sdk"))({ server: 'http://101.53.152.47:8080' });
 
 const secret = "ede1d4ccb4ec9a8bbbae9a13db3f4a7b56ea04189be86ac3a6a439d9a0a1addd";
 const passphrase = "satoshi";
 
-ccSDK.rpc.chain.getBestBlockNumber().then(function (num) {
-	console.log(num);
-});
-
 ccSDK.rpc.account.importRaw(secret, passphrase).then(function (account) {
 	console.log(account); // tccqzn9jjm3j6qg69smd7cn0eup4w7z2yu9my9a2k78
 });
+
+return;
+
+ccSDK.rpc.chain.getBestBlockNumber().then(function (num) {
+	console.log("Best Block Number: ", num);
+});
+
+const pk = ccSDK.util.generatePrivateKey();
+console.log("Your secret:", pk);
+
+const account = ccSDK.util.getAccountIdFromPrivate(pk);
+const address = ccSDK.key.classes.PlatformAddress.fromAccountId(account);
+console.log("Your CodeChain address:", address.toString());
+
+ccSDK.rpc.chain.getBalance(address).then(function (balance) {
+	// the balance is a U256 instance at this moment. Use toString() to print it out.
+	console.log("Balance in Account: ", balance.toString()); // the amount of CCC that the account has.
+});
+
+// ccSDK.rpc.account.importRaw(secret, passphrase).then(function (account) {
+// 	console.log(account); // tccqzn9jjm3j6qg69smd7cn0eup4w7z2yu9my9a2k78
+// });
 
 return;
 

@@ -1,0 +1,352 @@
+@import "variables.scss";
+@import "mixins.scss";
+.payment-action-back-color {
+  background-color: $payment-action-primary-color;
+}
+
+.payment-action-text-color {
+  color: $payment-action-primary-color;
+}
+
+.asset-transaction-group-action-back-color {
+  background-color: $asset-transaction-group-action-primary-color;
+}
+
+.asset-transaction-group-action-text-color {
+  color: $asset-transaction-group-action-primary-color;
+}
+
+.set-regular-key-action-back-color {
+  background-color: $set-regular-key-action-primary-color;
+}
+
+.set-regular-key-action-text-color {
+  color: $set-regular-key-action-primary-color;
+}
+
+.asset-transfer-transaction-back-color {
+  background-color: $asset-transfer-transaction-primary-color;
+}
+
+.asset-transfer-transaction-text-color {
+  color: $asset-transfer-transaction-primary-color;
+}
+
+.asset-mint-transaction-back-color {
+  background-color: $asset-mint-transaction-primary-color;
+}
+
+.asset-mint-transaction-text-color {
+  color: $asset-mint-transaction-primary-color;
+}
+
+.small-text {
+  @include small-text;
+}
+
+// Override bootstrap style
+.btn-primary,
+.btn-primary:active,
+.btn-primary:visited,
+.btn-primary:focus {
+  border-color: $primary-color;
+  background-color: white;
+  color: $primary-color;
+}
+
+.btn-primary:hover {
+  background-color: $primary-color;
+  border-color: $primary-color;
+  color: white;
+}
+
+.data-set {
+  & > .row {
+    padding-top: 7px;
+    padding-bottom: 7px;
+    & > [class*="col-"]:nth-child(1) {
+      @include heading-font;
+    }
+    & > [class*="col-"]:nth-child(2) {
+      .wrapper-for-title {
+        @include data-font;
+        @include ellipsis-block;
+      }
+    }
+  }
+  hr {
+    border: 0;
+    clear: both;
+    display: block;
+    height: 1px;
+    background-color: $line-color;
+    margin: 0;
+  }
+  .text-area {
+    background-color: $background-gray;
+    max-height: 58px;
+    min-height: 37px;
+    overflow-y: scroll;
+    word-wrap: break-word;
+    white-space: normal;
+    padding: 8px;
+  }
+}
+
+.data-set-for-status {
+  & > .row {
+    padding-top: 7px;
+    padding-bottom: 7px;
+    & > [class*="col-"]:nth-child(1) {
+      @include heading-font;
+    }
+    & > [class*="col-"]:nth-child(2) {
+      .wrapper-for-title {
+        text-align: right;
+        @include data-font;
+        @include ellipsis-block;
+      }
+    }
+  }
+  & > .one-line-data-set {
+    padding-top: 7px;
+    padding-bottom: 7px;
+    display: flex;
+    & > div:nth-child(1) {
+      @include heading-font;
+    }
+    & > div:nth-child(2) {
+      text-align: right;
+      flex: 1;
+      @include data-font;
+      @include ellipsis-block;
+    }
+  }
+  hr {
+    border: 0;
+    clear: both;
+    display: block;
+    height: 1px;
+    background-color: $line-color;
+    margin: 0;
+  }
+  .text-area {
+    background-color: $background-gray;
+    max-height: 58px;
+    min-height: 37px;
+    overflow-y: scroll;
+    word-wrap: break-word;
+    white-space: normal;
+    padding: 8px;
+  }
+}
+
+.data-table {
+  margin-bottom: 0;
+  table-layout: fixed;
+  border-color: white;
+  th,
+  td {
+    border-top: none;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  @include respond-below(sm) {
+    th,
+    td {
+      @include small-text;
+    }
+  }
+  td {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    @include data-font;
+    .icon {
+      margin-right: 5px;
+    }
+  }
+  thead {
+    th {
+      border-bottom: 2px solid $primary-color;
+    }
+  }
+}
+
+.hash-container {
+  .hash {
+    vertical-align: top;
+    @include ellipsis-block;
+    margin-right: 5px;
+    flex-grow: 1;
+    height: 30px;
+    background-color: $background-gray;
+    padding-left: 5px;
+    padding-right: 5px;
+    span {
+      @include data-font;
+      line-height: 30px;
+    }
+  }
+}
+
+.card-list-item {
+  position: relative;
+  border: 1px solid $line-color;
+  .card-list-item-header {
+    padding: 6px;
+    background-color: $background-gray;
+    border-bottom: 1px solid $line-color;
+    .title {
+      @include heading-font;
+    }
+  }
+  .card-list-item-body {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}
+
+.heading-hr {
+  border-top: 2px solid $primary-color;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.pager {
+  .number-view {
+    padding-left: 50px;
+    padding-right: 50px;
+    color: $primary-color;
+  }
+  @media (max-width: 550px) {
+    & {
+      width: 100%;
+      ul {
+        width: 100%;
+        display: flex;
+      }
+      li:nth-child(3) {
+        flex-grow: 1;
+      }
+    }
+    .number-view {
+      padding-left: 5px;
+      padding-right: 5px;
+      line-height: 26px;
+      text-align: center;
+      @include small-text;
+    }
+    .page-btn {
+      @include small-text;
+    }
+  }
+}
+
+.btn.disabled {
+  background-color: #f2f2f2 !important;
+  opacity: 1;
+  border: none;
+  color: $dark-color !important;
+}
+
+.mt-large {
+  margin-top: 30px;
+}
+
+.mt-small {
+  margin-top: 20px;
+}
+
+.mb-large {
+  margin-bottom: 30px;
+}
+
+.mb-small {
+  margin-bottom: 20px;
+}
+
+.right-panel-item {
+  background-color: $background-gray;
+  padding: 12px;
+  .square {
+    margin-right: 10px;
+  }
+  .item-name {
+    @include heading-font;
+  }
+  hr {
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+}
+
+.text-success {
+  color: #21ed77 !important;
+}
+
+.chart-container {
+  background-color: #f8f8f8;
+  width: 100%;
+  height: 350px;
+  position: relative;
+  .chart {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    .header-part {
+      position: relative;
+      height: 70px;
+      .title {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+      }
+      hr {
+        position: absolute;
+        top: 80px;
+        left: 20px;
+        width: calc(100% - 40px);
+      }
+      .subname {
+        position: absolute;
+        top: 100px;
+        left: 20px;
+        @include heading-font;
+      }
+      .subtitle {
+        position: absolute;
+        top: 68px;
+        left: 20px;
+        @include heading-font;
+      }
+      .subtitle-amount {
+        position: absolute;
+        top: 68px;
+        right: 20px;
+      }
+      .week {
+        position: absolute;
+        top: 45px;
+        left: 20px;
+      }
+      .select {
+        position: absolute;
+        right: 20px;
+        top: 20px;
+      }
+    }
+    .chart-item {
+      height: calc(100% - 70px);
+    }
+    .weekly-total {
+      position: absolute;
+      bottom: 10px;
+      right: 15px;
+      @include small-text;
+    }
+  }
+}

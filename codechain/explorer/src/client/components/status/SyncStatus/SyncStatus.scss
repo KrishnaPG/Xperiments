@@ -1,0 +1,13 @@
+.sync-status {
+  .custom-progress {
+    height: 21px;
+    .bg-success {
+      background-color: #31f3d0 !important;
+    }
+  }
+  .progress-value {
+    position: absolute;
+    top: 0px;
+    right: 20px;
+  }
+}
