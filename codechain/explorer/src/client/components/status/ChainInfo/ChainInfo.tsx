@@ -19,7 +19,7 @@ class ChainInfo extends React.Component<Props, {}> {
         return (
             <div className="chain-info">
                 <div>
-                    <h2>CodeChain Information</h2>
+                    <h2>Blockchain Information</h2>
                     <hr className="heading-hr" />
                 </div>
                 <DataSet isStatus={true}>
@@ -37,7 +37,7 @@ class ChainInfo extends React.Component<Props, {}> {
                         <div>Git hash</div>
                         <div>
                             <a
-                                href={`https://github.com/CodeChain-io/codechain/commit/${chainInfo.commitHash}`}
+                                // href={`https://github.com/CodeChain-io/codechain/commit/${chainInfo.commitHash}`}
                                 target="_black"
                             >
                                 {chainInfo.commitHash}

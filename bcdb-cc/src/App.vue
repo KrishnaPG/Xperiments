@@ -4,10 +4,13 @@
     <p>Last Transaction: <a :href="lastTransactionURI" target="_blank">{{lastTransactionId}}</a> </p>
     <hr>
     <!-- <secure-exchange-ui></secure-exchange-ui> -->
+    <tagDice ref="dice" v-on:roll="onRoll"></tagDice>
+    <h4 id="result" v-if="rolls.length">Numbers Rolled: <br/>{{rolls}}</h4>
   </div>
 </template>
 
 <script>
+const tagDice = resolve => require(['@/components/dice'], resolve);
 import secureExchangeUi from '@/components/secure-exchange';
 const Buffer = require('buffer').Buffer;
 const BigchainDB = require('bigchaindb-driver');
@@ -38,18 +41,18 @@ let txSigned;
 export default {
   name: 'App',
   components: {
-    secureExchangeUi
+    secureExchangeUi,
+    tagDice
   },
   data: function() { 
     return {
       lastTransactionId: null,
-      lastTransactionURI: null
+      lastTransactionURI: null,
+      rolls: []
     }   
   },
   mounted: function()
   {
-
-
     console.log(BigchainDB.Transaction.makeEd25519Condition(user1.publicKey))
     // at the output of the transaction to-be-spent
     // Generate threshold condition 2 out of 3
@@ -118,7 +121,11 @@ export default {
         
         console.log(cc.validateFulfillment(ed25519Fulfillment, ed25519Condition.getConditionUri(), new Buffer('password')));
       }
-    }
+    },
+    onRoll: function(value) {
+      if(this.rolls.length >= 5) this.rolls.shift();
+      this.rolls.push(value);
+    }  
   }
 }
 </script>
