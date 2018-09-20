@@ -49,7 +49,7 @@ class Header extends React.Component<{}, State> {
                                 <NavbarBrand>
                                     <img src={logo} className="logo" />{" "}
                                     <div className="d-inline-block header-big">
-                                        <span className="header-title">Blockchain Records</span>
+                                        <span className="header-title">Cenacle</span>
                                     </div>
                                     <div className="d-inline-block header-small">
                                         <span className="header-title">Blockchain Records</span>

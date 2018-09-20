@@ -193,16 +193,30 @@ export default {
       if(this.userWin) { this.sendPayment(bookieAccount, bookiePwd, userAccount, this.userWin, Date.now());    console.log("transfer in: ", this.userWin); }
     },
     sendPayment: function(account, passphrase, recipient, amount, refNo) {
-      const parcel = ccSDK.core.createPaymentParcel({ recipient,  amount });
-      ccSDK.rpc.chain.sendParcel(parcel, {
-        account,
-        passphrase,
-        nonce: Date.now()
-      }).then(parcelHash => {
-        return ccSDK.rpc.chain.getParcelInvoice(parcelHash, { timeout: 300 * 1000 });
-      }).then(parcelInvoice => { console.log("invoice: refNo ", refNo);
-        this.invoices[refNo] = parcelInvoice;
-        this.refreshBalance();
+      const pPendingParcels = ccSDK.rpc.chain.getPendingParcels();
+      const pGetNonce = ccSDK.rpc.chain.getNonce(account);
+      Promise.all([pPendingParcels, pGetNonce]).then(results => {
+        const pendingParcels = results[0];
+        const pendingNonceVal = pendingParcels.length ? pendingParcels[pendingParcels.length - 1].unsigned.nonce : 0; // assuming that last pending parcel contains the larget nonce
+        const getNonceVal = results[1];
+        // if no pending parcels exist, or pending parcels are old, then ignore them
+        const nonce = pendingNonceVal > getNonceVal ? pendingNonceVal : getNonceVal;
+        
+        console.log("getnonce: ", getNonceVal.toString(), ", parcel calculated: ", pendingNonceVal.toString(), ", nonce = ", nonce.toString(), ", pending parcels: ", pendingParcels) ;
+
+        const parcel = ccSDK.core.createPaymentParcel({ recipient, amount });
+        ccSDK.rpc.chain.sendParcel(parcel, {
+          account,
+          passphrase,
+          nonce
+        }).then(parcelHash => {
+          return ccSDK.rpc.chain.getParcelInvoice(parcelHash, { timeout: 300 * 1000 });
+        }).then(parcelInvoice => {
+          console.log("invoice: refNo ", refNo);
+          this.invoices[refNo] = parcelInvoice;
+          this.refreshBalance();
+        });
+
       });
     },
     refreshBalance: function() {
