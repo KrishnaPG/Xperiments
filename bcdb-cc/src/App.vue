@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <!-- <v-button @click="transfer">Transfer</v-button> -->
-    <p>Last Transaction:  Win: {{userWin}}  Loss:{{userLoss}}  Balance: {{accountBalance}}</p>
+    <p>Last Transaction:  Win: {{userWin}}  Loss:{{userLoss}}  Balance: {{accountBalance}} <br/>Bookie Balance: {{bookieBalance}}</p>
     <hr>
     <!-- <secure-exchange-ui></secure-exchange-ui> -->
     <tagDice ref="dice" v-on:roll="onRoll"></tagDice>
@@ -28,9 +28,9 @@
 const tagDice = resolve => require(['@/components/dice'], resolve);
 import secureExchangeUi from '@/components/secure-exchange';
 const ccSDK = new (require("codechain-sdk"))({ server: 'http://101.53.152.47:8080' });
-const bookieAccount = "tccqzn9jjm3j6qg69smd7cn0eup4w7z2yu9my9a2k78";  // built-in test account that has lots of money
+const bookieAccount = "tccq9h7vnl68frvqapzv3tujrxtxtwqdnxw6yamrrgd";  // built-in test account that has lots of money
 const bookiePwd = "satoshi";
-const userAccount = "tccqzaa3x0jkh7w6lfz3nzrszupawdpxsljlsuv74yc";  // account of the user who is betting
+const userAccount = "tccqx0f8eaz3n8laycyzdqllfnt05w9uae6mc0h6c4y";  // account of the user who is betting
 const userPwd = "password";
 const Buffer = require('buffer').Buffer;
 const BigchainDB = require('bigchaindb-driver');
@@ -76,10 +76,18 @@ export default {
       userLoss: '',
       invoices: {},
       accountBalance: 0,
+      bookieBalance: 0,
     }   
   },
   mounted: function()
   {
+
+    var secret = "ede1d4ccb4ec9a8bbbae9a13db3f4a7b56ea04189be86ac3a6a439d9a0a1addd";
+    var passphrase = "satoshi";
+    ccSDK.rpc.account.importRaw(secret, passphrase).then(function (account) {
+      console.log("account imported: ", account); // tccqzn9jjm3j6qg69smd7cn0eup4w7z2yu9my9a2k78
+    }).catch(ex => console.log("import raw: ", ex));
+
     this.refreshOdds();
     this.refreshBalance();
 
@@ -224,7 +232,12 @@ export default {
         // the balance is a U256 instance at this moment. Use toString() to print it out.
         this.accountBalance = balance.value;
         console.log("balance: ", balance.toString()); // the amount of CCC that the account has.
-      });  
+      }).catch(ex => console.log("user Balance: ", ex));
+      ccSDK.rpc.chain.getBalance(bookieAccount).then(balance => {
+        // the balance is a U256 instance at this moment. Use toString() to print it out.
+        this.bookieBalance = balance.value;
+        console.log("bookie Balance: ", balance.toString()); // the amount of CCC that the account has.
+      }).catch(ex => console.log("Bookie Balance: ", ex));
     }
   }
 }
