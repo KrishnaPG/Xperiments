@@ -10,15 +10,14 @@
     "build": "node build/build.js"
   },
   "dependencies": {
-    "bigchaindb-driver": "^4.0.0",
+    "bigchaindb-driver": "^4.1.0",
     "bs58": "^4.0.1",
-    "buffer": "^5.1.0",
-    "codechain-sdk": "^0.4.0-rc3",
-    "crypto-conditions": "^2.0.1",
-    "js-sha3": "^0.7.0",
-    "node-rsa": "^1.0.0",
+    "buffer": "^5.2.1",
+    "crypto-conditions": "^2.0.3",
+    "js-sha3": "^0.8.0",
+    "node-rsa": "^1.0.1",
     "node-uuid": "^1.4.8",
-    "otplib": "^10.0.0",
+    "otplib": "^10.0.1",
     "request": "^2.88.0",
     "sjcl": "^1.0.7"
   },

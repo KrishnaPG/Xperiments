@@ -1,6 +1,7 @@
 <template>
   <div id="app">
-    <!-- <v-button @click="transfer">Transfer</v-button> -->
+    <v-button @click="transfer">Transfer</v-button>
+    <p>Last Transaction: <a :href="lastTransactionURI" target="_blank">{{lastTransactionId}}</a> </p>
     <p>Last Transaction:  Win: {{userWin}}  Loss:{{userLoss}}  Balance: {{accountBalance}} <br/>Bookie Balance: {{bookieBalance}}</p>
     <hr>
     <!-- <secure-exchange-ui></secure-exchange-ui> -->
@@ -27,23 +28,16 @@
 <script>
 const tagDice = resolve => require(['@/components/dice'], resolve);
 import secureExchangeUi from '@/components/secure-exchange';
-const ccSDK = new (require("codechain-sdk"))({ server: 'http://101.53.152.47:8080' });
-const bookieAccount = "tccq9h7vnl68frvqapzv3tujrxtxtwqdnxw6yamrrgd";  // built-in test account that has lots of money
-const bookiePwd = "satoshi";
-const userAccount = "tccqx0f8eaz3n8laycyzdqllfnt05w9uae6mc0h6c4y";  // account of the user who is betting
-const userPwd = "password";
-const assetTransferAddress1 = "tcaqyqld6w0r87vv6h6mdekms82lmhcnts97p5s43vtpv";
-const assetTransferAddress2 = "tcaqyq5cd88kedfyhmy66702wcku2pkax3wx9lqxnxtgx";
 const Buffer = require('buffer').Buffer;
 const BigchainDB = require('bigchaindb-driver');
 const base58 = require('bs58');
 const cc = require('crypto-conditions');
 const sha3 = require('js-sha3');
 const API_PATH = 'https://test.bigchaindb.com/api/v1/'
-const conn = new BigchainDB.Connection(API_PATH, {
+const conn = new BigchainDB.Connection(API_PATH /*, {
   app_id: '21049ec1',
   app_key: '79a0c993f29ff4ba921ea724a112f6f6'
-});
+}*/);
 const user1 = new BigchainDB.Ed25519Keypair()
 const user2 = new BigchainDB.Ed25519Keypair()
 const user3 = new BigchainDB.Ed25519Keypair()
@@ -83,112 +77,13 @@ export default {
   },
   mounted: async function()
   {
-
-    ccSDK.rpc.account.getList().then(accounts => {
-      accounts.forEach(element => {
-        ccSDK.rpc.chain.getBalance(element).then(balance => console.log(`account ${element} has balance: ${balance}`));
-      });
-    }); 
-
-    // Create asset named Gold. Total amount of Gold is 10000. The registrar is set
-    // to null, which means this type of asset can be transferred freely.
-    const goldAssetScheme = ccSDK.core.createAssetScheme({
-      shardId: 0,
-      worldId: 0,
-      metadata: JSON.stringify({
-        name: "Gold",
-        description: "An asset example",
-        icon_url: "https://gold.image/"
-      }),
-      amount: 10000,
-      registrar: null
-    });    
-
-    const mintTx = ccSDK.core.createAssetMintTransaction({
-      scheme: goldAssetScheme,
-      recipient: assetTransferAddress1
-    });    
-
-    const firstGold = mintTx.getMintedAsset();    
-
-    const transferTx = ccSDK.core
-      .createAssetTransferTransaction()
-      .addInputs(firstGold)
-      .addOutputs(
-        {
-          recipient: assetTransferAddress1,
-          amount: 3000,
-          assetType: firstGold.assetType
-        },
-        {
-          recipient: assetTransferAddress2,
-          amount: 7000,
-          assetType: firstGold.assetType
-        }
-      ); 
-      
-    await ccSDK.key.signTransactionInput(transferTx, 0);
-
-    const parcel = ccSDK.core.createAssetTransactionGroupParcel({
-      transactions: [mintTx, transferTx]
-    });
-    await ccSDK.rpc.chain.sendParcel(parcel, {
-      account: bookieAccount,
-      passphrase: bookiePwd
-    });
-
-    const mintTxInvoice = await ccSDK.rpc.chain.getTransactionInvoice(
-      mintTx.hash(),
-      {
-        timeout: 300 * 1000
-      }
-    );
-    if (mintTxInvoice.success === false) {
-      throw Error("AssetMintTransaction failed");
-    }
-    const transferTxInvoice = await ccSDK.rpc.chain.getTransactionInvoice(
-      transferTx.hash(),
-      {
-        timeout: 300 * 1000
-      }
-    );
-    if (transferTxInvoice.success === false) {
-      throw Error("AssetTransferTransaction failed");
-    }    
-
-    return;
-
-    console.log("creating address");
-
-    ccSDK.key
-      .createAssetTransferAddress()
-      .then(function (address) {
-        // This type of address is used to receive assets when minting or transferring them.
-        // Example: tcaqqq9pgkq69z488qlkvhkpcxcgfd3cqlkzgxyq9cewxuda8qqz7jtlvctt5eze
-        console.log("asset transfer address: ", address.toString());
-      })
-      .catch(console.error);   
-      
-    console.log("creation done");
-
-    var secret = "ede1d4ccb4ec9a8bbbae9a13db3f4a7b56ea04189be86ac3a6a439d9a0a1addd";
-    var passphrase = "satoshi";
-    ccSDK.rpc.account.importRaw(secret, passphrase).then(function (account) {
-      console.log("account imported: ", account); // tccqzn9jjm3j6qg69smd7cn0eup4w7z2yu9my9a2k78
-    }).catch(ex => console.log("import raw: ", ex));
-
-    this.refreshOdds();
-    this.refreshBalance();
-
-    return;
-
     console.log(BigchainDB.Transaction.makeEd25519Condition(user1.publicKey))
     // at the output of the transaction to-be-spent
     // Generate threshold condition 2 out of 3
 
     console.log(thresholdCondition)
     let output = BigchainDB.Transaction.makeOutput(thresholdCondition);
-    output.public_keys = [user1.publicKey, user2.publicKey, user3.publicKey];/*
+    output.public_keys = [user1.publicKey, user2.publicKey, user3.publicKey];
 
     const tx = BigchainDB.Transaction.makeCreateTransaction({
       data: 'payload'
@@ -206,7 +101,9 @@ export default {
         console.log('Create Transaction', txSigned.id, 'accepted')
         this.lastTransactionURI = API_PATH + 'transactions/' + txSigned.id;
         this.lastTransactionId = txSigned.id;
-      });*/
+      });
+
+    return;
 
     const txCreateAliceSimple = BigchainDB.Transaction.makeCreateTransaction(
       { 'asset': 'bicycle' },
@@ -217,13 +114,13 @@ export default {
       alice.publicKey
     );
     txCreateAliceSimpleSigned = BigchainDB.Transaction.signTransaction(txCreateAliceSimple, alice.privateKey);
-    /* Send the transaction off to BigchainDB
+    /* Send the transaction off to BigchainDB    */
     conn.postTransactionCommit(txCreateAliceSimpleSigned)
       .then(res => {
         console.log('Create Transaction', txCreateAliceSimpleSigned.id, 'accepted')
         this.lastTransactionURI = API_PATH + 'transactions/' + txCreateAliceSimpleSigned.id;
         this.lastTransactionId = txCreateAliceSimpleSigned.id;
-      });    */
+      });
   },
   methods: {
     refreshOdds: function() {
@@ -256,21 +153,6 @@ export default {
         
         console.log(cc.validateFulfillment(ed25519Fulfillment, ed25519Condition.getConditionUri(), new Buffer('password')));
       }
-      {
-        const account ="tccqzaa3x0jkh7w6lfz3nzrszupawdpxsljlsuv74yc";
-        const password ="password";
-
-        ccSDK.rpc.account.getList().then(accounts => {
-          accounts.forEach(element => {
-            ccSDK.rpc.chain.getBalance(element).then(balance => console.log(`account ${element} has balance: ${balance}`));
-          });
-        });
-
-
-
-        console.log("this: bet: ", this.betAmounts);
-        //console.log("code chain address: ", ccSDK.key.classes.PlatformAddress.fromAccountId(account));
-      }
     },
     onRoll: function(value) {
       this.betNames.forEach((name, index) => { if(!this.betAmounts[index] || this.betAmounts[index]=="") this.betAmounts[index]  = 0; });
@@ -290,43 +172,8 @@ export default {
       if(this.userWin) { this.sendPayment(bookieAccount, bookiePwd, userAccount, this.userWin, Date.now());    console.log("transfer in: ", this.userWin); }
     },
     sendPayment: function(account, passphrase, recipient, amount, refNo) {
-      const pPendingParcels = ccSDK.rpc.chain.getPendingParcels();
-      const pGetNonce = ccSDK.rpc.chain.getNonce(account);
-      Promise.all([pPendingParcels, pGetNonce]).then(results => {
-        const pendingParcels = results[0];
-        const pendingNonceVal = pendingParcels.length ? pendingParcels[pendingParcels.length - 1].unsigned.nonce : 0; // assuming that last pending parcel contains the larget nonce
-        const getNonceVal = results[1];
-        // if no pending parcels exist, or pending parcels are old, then ignore them
-        const nonce = pendingNonceVal > getNonceVal ? pendingNonceVal : getNonceVal;
-        
-        console.log("getnonce: ", getNonceVal.toString(), ", parcel calculated: ", pendingNonceVal.toString(), ", nonce = ", nonce.toString(), ", pending parcels: ", pendingParcels) ;
-
-        const parcel = ccSDK.core.createPaymentParcel({ recipient, amount });
-        ccSDK.rpc.chain.sendParcel(parcel, {
-          account,
-          passphrase,
-          nonce
-        }).then(parcelHash => {
-          return ccSDK.rpc.chain.getParcelInvoice(parcelHash, { timeout: 300 * 1000 });
-        }).then(parcelInvoice => {
-          console.log("invoice: refNo ", refNo);
-          this.invoices[refNo] = parcelInvoice;
-          this.refreshBalance();
-        });
-
-      });
     },
     refreshBalance: function() {
-      ccSDK.rpc.chain.getBalance(userAccount).then(balance => {
-        // the balance is a U256 instance at this moment. Use toString() to print it out.
-        this.accountBalance = balance.value;
-        console.log("balance: ", balance.toString()); // the amount of CCC that the account has.
-      }).catch(ex => console.log("user Balance: ", ex));
-      ccSDK.rpc.chain.getBalance(bookieAccount).then(balance => {
-        // the balance is a U256 instance at this moment. Use toString() to print it out.
-        this.bookieBalance = balance.value;
-        console.log("bookie Balance: ", balance.toString()); // the amount of CCC that the account has.
-      }).catch(ex => console.log("Bookie Balance: ", ex));
     }
   }
 }
