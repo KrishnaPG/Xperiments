@@ -32,6 +32,8 @@ const bookieAccount = "tccq9h7vnl68frvqapzv3tujrxtxtwqdnxw6yamrrgd";  // built-i
 const bookiePwd = "satoshi";
 const userAccount = "tccqx0f8eaz3n8laycyzdqllfnt05w9uae6mc0h6c4y";  // account of the user who is betting
 const userPwd = "password";
+const assetTransferAddress1 = "tcaqyqld6w0r87vv6h6mdekms82lmhcnts97p5s43vtpv";
+const assetTransferAddress2 = "tcaqyq5cd88kedfyhmy66702wcku2pkax3wx9lqxnxtgx";
 const Buffer = require('buffer').Buffer;
 const BigchainDB = require('bigchaindb-driver');
 const base58 = require('bs58');
@@ -79,8 +81,84 @@ export default {
       bookieBalance: 0,
     }   
   },
-  mounted: function()
+  mounted: async function()
   {
+
+    ccSDK.rpc.account.getList().then(accounts => {
+      accounts.forEach(element => {
+        ccSDK.rpc.chain.getBalance(element).then(balance => console.log(`account ${element} has balance: ${balance}`));
+      });
+    }); 
+
+    // Create asset named Gold. Total amount of Gold is 10000. The registrar is set
+    // to null, which means this type of asset can be transferred freely.
+    const goldAssetScheme = ccSDK.core.createAssetScheme({
+      shardId: 0,
+      worldId: 0,
+      metadata: JSON.stringify({
+        name: "Gold",
+        description: "An asset example",
+        icon_url: "https://gold.image/"
+      }),
+      amount: 10000,
+      registrar: null
+    });    
+
+    const mintTx = ccSDK.core.createAssetMintTransaction({
+      scheme: goldAssetScheme,
+      recipient: assetTransferAddress1
+    });    
+
+    const firstGold = mintTx.getMintedAsset();    
+
+    const transferTx = ccSDK.core
+      .createAssetTransferTransaction()
+      .addInputs(firstGold)
+      .addOutputs(
+        {
+          recipient: assetTransferAddress1,
+          amount: 3000,
+          assetType: firstGold.assetType
+        },
+        {
+          recipient: assetTransferAddress2,
+          amount: 7000,
+          assetType: firstGold.assetType
+        }
+      ); 
+      
+    await ccSDK.key.signTransactionInput(transferTx, 0);
+
+    const parcel = ccSDK.core.createAssetTransactionGroupParcel({
+      transactions: [mintTx, transferTx]
+    });
+    await ccSDK.rpc.chain.sendParcel(parcel, {
+      account: bookieAccount,
+      passphrase: bookiePwd
+    });
+
+    const mintTxInvoice = await ccSDK.rpc.chain.getTransactionInvoice(
+      mintTx.hash(),
+      {
+        timeout: 300 * 1000
+      }
+    );
+    if (mintTxInvoice.success === false) {
+      throw Error("AssetMintTransaction failed");
+    }
+    const transferTxInvoice = await ccSDK.rpc.chain.getTransactionInvoice(
+      transferTx.hash(),
+      {
+        timeout: 300 * 1000
+      }
+    );
+    if (transferTxInvoice.success === false) {
+      throw Error("AssetTransferTransaction failed");
+    }    
+
+    return;
+
+    console.log("creating address");
 
     ccSDK.key
       .createAssetTransferAddress()
@@ -89,7 +167,9 @@ export default {
         // Example: tcaqqq9pgkq69z488qlkvhkpcxcgfd3cqlkzgxyq9cewxuda8qqz7jtlvctt5eze
         console.log("asset transfer address: ", address.toString());
       })
-      .catch(console.error);    
+      .catch(console.error);   
+      
+    console.log("creation done");
 
     var secret = "ede1d4ccb4ec9a8bbbae9a13db3f4a7b56ea04189be86ac3a6a439d9a0a1addd";
     var passphrase = "satoshi";
