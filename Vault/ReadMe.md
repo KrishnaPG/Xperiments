@@ -1,3 +1,7 @@
+# Starting the dev server
+````
+./vault server -dev -dev-listen-address=0.0.0.0:8200
+````
 
 # Create Policy to allow actions on the required path
 Using the [ACL Create](http://127.0.0.1:8200/ui/vault/policies/acl/create) link create a new policy, or edit the `default` policy to include the below section to give access to all operations on the `transit` path

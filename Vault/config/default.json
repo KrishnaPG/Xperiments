@@ -10,12 +10,12 @@
 	},
 	"Vault": {
 		"server": { 
-			"baseURL": "http://127.0.0.1:8200/v1", 
+			"baseURL": "http://192.168.0.102:8200/v1", 
 			"timeout": 1000 
 		},
 		"login": {
-			"role_id": "7ad5cd78-09aa-d913-8ae6-b89a2c9dc8ff",
-			"secret_id": "f342e4a1-7fd9-6932-6b1b-1871e8507ca7"
+			"role_id": "e1261fc1-dfc0-bb00-aea4-9a26e7d40d5a",
+			"secret_id": "ea885dbd-76aa-dbf8-17c5-ebf5fd98c26b"
 		}
 	}
 }
