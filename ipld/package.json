@@ -1,0 +1,21 @@
+{
+  "name": "ipld",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "set NODE_ENV=dev& nodemon --max_old_space_size=100 --inspect=0.0.0.0:9250 ./index.js",
+    "debug": "set NODE_ENV=dev& set DEBUG=* & nodemon --inspect-brk=9250 ./index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cids": "^0.7.1",
+    "ipfs-http-client": "^31.1.0",
+    "ipfs-repo": "^0.26.6"
+  },
+  "devDependencies": {
+    "esm": "^3.0.84",
+    "nodemon": "^1.18.4"
+  }
+}
