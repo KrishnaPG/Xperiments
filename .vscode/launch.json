@@ -4,32 +4,17 @@
 	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
 	"version": "0.2.0",
 	"configurations": [
-
 		{
 			"type": "node",
 			"request": "attach",
-			"name": "Attach",
-			"port": 9230
+			"name": "Attach to BitTorrent",
+			"port": 9232
 		},
 		{
 			"type": "node",
-			"request": "launch",
-			"name": "Launch Program",
-			"program": "${workspaceFolder}/Vault\\index.js",
-			"port": 9230
-		},
-		{
-			"type": "node",
-			"request": "launch",
-			"name": "Debug via NPM",
-			"cwd": "${workspaceFolder}/vault",
-			"runtimeExecutable": "npm",
-			"runtimeArgs": [
-				"run",
-				"debug",
-				"--"
-			],
-			"port": 9230
-		}		
+			"request": "attach",
+			"name": "Attach to BrowserNode",
+			"port": 9251
+		}
 	]
 }

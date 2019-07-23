@@ -54,7 +54,7 @@ const condition3 = BigchainDB.Transaction.makeEd25519Condition(user3.publicKey, 
 const condition4 = BigchainDB.Transaction.makeEd25519Condition(carly.publicKey, false);
 
 const thresholdCondition = BigchainDB.Transaction.makeThresholdCondition(threshold, [condition1, condition2, condition3]);  // 2 of {user1, user2, user3}
-const megaCondition = BigchainDB.Transaction.makeThresholdCondition(threshold, [thresholdCondition, condition4]); // both {Carly, and 2 of {user1, user2, user3}}
+//const megaCondition = BigchainDB.Transaction.makeThresholdCondition(threshold, [thresholdCondition, condition4]); // both {Carly, and 2 of {user1, user2, user3}}
 let txCreateAliceSimpleSigned;
 let txSigned;
 export default {
@@ -80,41 +80,7 @@ export default {
   },
   mounted: async function()
   {
-    console.log(BigchainDB.Transaction.makeEd25519Condition(user1.publicKey));
-    // at the output of the transaction to-be-spent
-    // Generate threshold condition 2 out of 3
-
-    console.log("thresholdCondition: ", thresholdCondition);
-    console.log("mega condition: ", megaCondition);
-    let output = BigchainDB.Transaction.makeOutput(megaCondition);
-    output.public_keys = [user1.publicKey, user2.publicKey, user3.publicKey, carly.publicKey];
-
-    const tx = BigchainDB.Transaction.makeCreateTransaction(
-      {
-        data: 'payload'
-      }, 
-      {
-        metadata: 'test'
-      }, 
-      [output],
-      creator.publicKey
-    );
-    // Sign the transaction with private keys
-    txSigned = BigchainDB.Transaction.signTransaction(tx, creator.privateKey);
-
-    // Send the transaction off to BigchainDB
-    conn.postTransactionCommit(txSigned)
-      .then(res => {
-        console.log('Create Transaction', txSigned.id, 'accepted');
-        this.lastTransactionURI = API_PATH + 'transactions/' + txSigned.id;
-        this.lastTransactionId = txSigned.id;
-        
-        this.thresholdTransfer(txSigned, bob);
-      });
-
-    return;
-
-    const txCreateAliceSimple = BigchainDB.Transaction.makeCreateTransaction(
+     const txCreateAliceSimple = BigchainDB.Transaction.makeCreateTransaction(
       { 'asset': 'bicycle' },
       { 'purchase_price': '€240' },
       [

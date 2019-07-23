@@ -10,9 +10,17 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "async": "^2.6.2",
     "cids": "^0.7.1",
+    "fast-write-atomic": "^0.2.1",
+    "glob": "^7.1.4",
+    "graceful-fs": "^4.1.15",
+    "interface-datastore": "^0.7.0",
+    "ipfs": "^0.35.0",
     "ipfs-http-client": "^31.1.0",
-    "ipfs-repo": "^0.26.6"
+    "ipfs-repo": "^0.26.6",
+    "mkdirp": "^0.5.1",
+    "pull-stream": "^3.6.11"
   },
   "devDependencies": {
     "esm": "^3.0.84",
