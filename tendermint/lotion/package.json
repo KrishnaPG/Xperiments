@@ -1,5 +1,5 @@
 {
-  "name": "lotion",
+  "name": "lotion-test-app",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -10,11 +10,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "lotion": "^0.4.23"
+    "lotion": "^0.4.32"
   },
   "devDependencies": {
-    "esm": "^3.0.84",
-    "nodemon": "^1.18.4",
+    "esm": "^3.2.25",
+    "nodemon": "^1.19.1",
     "pino-pretty": "^2.5.0"
   }
 }

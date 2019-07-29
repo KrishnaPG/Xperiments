@@ -13,6 +13,12 @@
 		{
 			"type": "node",
 			"request": "attach",
+			"name": "Attach to Lotion",
+			"port": 9233
+		},		
+		{
+			"type": "node",
+			"request": "attach",
 			"name": "Attach to BrowserNode",
 			"port": 9251
 		}
