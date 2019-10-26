@@ -4,16 +4,19 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "clean": "lerna run clean",
     "dev": "set NODE_ENV=dev& nodemon --max_old_space_size=100 --inspect=0.0.0.0:9233 ./index.js",
     "debug": "set NODE_ENV=dev& set DEBUG=* & nodemon --inspect-brk=9233 ./index.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "lotion": "^0.4.32"
+    "lotionjs": "file:packages/lotionjs",
+    "typescript": "^3.5.3"
   },
   "devDependencies": {
     "esm": "^3.2.25",
+    "lerna": "^3.16.4",
     "nodemon": "^1.19.1",
     "pino-pretty": "^2.5.0"
   }

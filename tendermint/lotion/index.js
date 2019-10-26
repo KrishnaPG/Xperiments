@@ -1,4 +1,4 @@
-let lotion = require('lotion');
+let lotion = require('./packages/lotionjs/src/index.ts');
 
 let app = lotion({
   initialState: {

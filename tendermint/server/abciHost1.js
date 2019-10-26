@@ -58,7 +58,7 @@ const server = createServer({
     return {}
   },
   deliverTx: ({ tx }) => {
-    console.log("deliverTx: ", tx.toString());
+    console.log("rejecting deliverTx: ", tx.toString());/*
     return {
       code: 0,
       log: `deliverTx: ${tx}`,
@@ -66,7 +66,11 @@ const server = createServer({
       gasWanted: 0,
       gasUsed: 0,
       tags: []
-    }
+    }*/
+    return {
+      code: 1,
+      log: 'tx does not match state'
+    }    
   },
   // endBlock: (request) => {
   //   console.log("endBlock: ", request);
@@ -81,7 +85,7 @@ const server = createServer({
    * MemPool Connection - CheckTx
    */
   checkTx: ({ tx }) => {
-    console.log("checkTx: ", tx.toString());
+    console.log("not rejecting checkTx: ", tx.toString());
     return {
       code: 0,
       log: 'tx succeeded',

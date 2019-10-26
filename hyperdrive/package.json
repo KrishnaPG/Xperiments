@@ -1,0 +1,23 @@
+{
+  "name": "hd",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "set NODE_ENV=dev& nodemon --max_old_space_size=100 --inspect=0.0.0.0:9252 ./index.js",
+    "debug": "set NODE_ENV=dev& set DEBUG=* & nodemon --inspect-brk=9252 ./index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "esm": "^3.0.84",
+    "nodemon": "^1.18.4",
+    "pino-pretty": "^2.5.0"
+  },
+  "dependencies": {
+    "dat-sdk": "^0.3.2",
+    "hyperdb": "^3.5.0",
+    "hyperdrive": "^10.3.2",
+    "stream-collector": "^1.0.1"
+  }
+}

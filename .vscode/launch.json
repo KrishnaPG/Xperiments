@@ -4,23 +4,42 @@
 	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
 	"version": "0.2.0",
 	"configurations": [
+
 		{
 			"type": "node",
 			"request": "attach",
-			"name": "Attach to BitTorrent",
+			"name": "Attach to Xp: BitTorrent",
 			"port": 9232
 		},
 		{
 			"type": "node",
 			"request": "attach",
-			"name": "Attach to Lotion",
+			"name": "Attach to Xp: Lotion",
 			"port": 9233
 		},		
 		{
 			"type": "node",
 			"request": "attach",
-			"name": "Attach to BrowserNode",
+			"name": "Attach to Xp: Tendermint/Server",
+			"port": 9250
+		},
+		{
+			"type": "node",
+			"request": "attach",
+			"name": "Attach to Xp: BrowserNode",
 			"port": 9251
+		},
+		{
+			"type": "node",
+			"request": "attach",
+			"name": "Attach to Xp: Hyperdrive",
+			"port": 9252
+		},
+		{
+			"type": "node",
+			"request": "attach",
+			"name": "Attach to Xp: Tendermint/Client",
+			"port": 9253
 		}
 	]
 }

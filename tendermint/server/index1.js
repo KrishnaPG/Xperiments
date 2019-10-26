@@ -25,5 +25,5 @@ process.argv.forEach(function (val, index, array) {
 console.log("port: ", process.argv[2]);
 
 // start the abci
-const abciServer = require('./abciHost');
+const abciServer = require('./abciHost1');
 abciServer.listen(process.argv[2]);// 26658
