@@ -13,7 +13,7 @@ client.subscribe({
 }, response => console.log("new block response:", response));
 
 client.broadcastTxAsync({
-	"tx": "SGVsbG8xMjM0NTY="
+	"tx": Buffer.from(`{val: ${new Date()}}`).toString("base64")
 }).then(response => console.log("broadcast response: ", response)).catch(ex => {
-	console.error("brodcast failure: ", ex);
+	console.error("broadcast failure: ", ex);
 });

@@ -40,6 +40,12 @@
 			"request": "attach",
 			"name": "Attach to Xp: Tendermint/Client",
 			"port": 9253
-		}
+		},
+		{
+			"type": "node",
+			"request": "attach",
+			"name": "Attach to Xp: WebAuthn",
+			"port": 9254
+		}		
 	]
 }

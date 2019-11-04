@@ -1,0 +1,19 @@
+{
+  "name": "webauthn",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "dev": "set NODE_ENV=dev& nodemon --max_old_space_size=100 --inspect=0.0.0.0:9254 ./server.js",
+    "debug": "set NODE_ENV=dev& set DEBUG=* & nodemon --inspect-brk=9254 ./server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fido2-lib": "^2.1.1",
+    "ws": "^7.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^1.19.4"
+  }
+}

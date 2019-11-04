@@ -1,0 +1,88 @@
+<html>
+	<script src="https://unpkg.com/ipld-dag-cbor/dist/index.min.js"></script>
+	<script src="https://bundle.run/buffer@5.4.3"></script>
+	<body>
+		<button onclick="onRegisterClicked()">Register</button>
+		<br/>
+		<button onclick="onLoginClicked()">Login</button>
+		<h2 id="status">Not Connected to WS</h2>
+		<script>
+			const Buffer = buffer.Buffer;
+			const ws = new WebSocket("ws://127.0.0.1:9090"); // ws://127.0.0.1:9090
+			ws.onopen = event => {
+				document.getElementById('status').textContent = `Connected @ ${new Date()})`
+				ws.send(JSON.stringify({ method: 'echo', msg: "Hello World" }));
+			};
+			ws.onmessage = event => {
+				console.log("received from server: ", event);
+				const response = JSON.parse(event.data);
+				console.log("response from server: ", response);
+			};
+
+			async function start() {
+				const publicKeyCredentialCreationOptions = {
+					challenge: Uint8Array.from(
+						"randomStringFromServer", c => c.charCodeAt(0)),
+					rp: {
+						name: "Duo Security",
+						// id: window.location.origin,
+					},
+					user: {
+						id: Uint8Array.from(
+							"UZSL85T9AFC", c => c.charCodeAt(0)),
+						name: "lee@webauthn.guide",
+						displayName: "Lee",
+					},
+					pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+					// authenticatorSelection: {
+					// 	authenticatorAttachment: "cross-platform",
+					// 	userVerification: "discouraged"
+					// },
+					timeout: 60000,
+					attestation: "direct"
+				}
+				const credential = await navigator.credentials.create({
+					publicKey: publicKeyCredentialCreationOptions
+				});			
+				console.log("credential: ", credential);
+				window.cred = credential;
+
+				ws.send(JSON.stringify({
+					method: 'register.finish',
+					params: {
+						attestationResponse: {
+							id: credential.id,
+							rawId: Buffer.from(credential.rawId).toString("base64"),
+							response: {
+								clientDataJSON: Buffer.from(credential.response.clientDataJSON).toString("base64"),
+								attestationObject: Buffer.from(credential.response.attestationObject).toString("base64")
+							},
+							type: credential.type
+						} ,
+						challenge: Buffer.from("randomStringFromServer").toString("base64"),
+						origin: window.location.origin
+					}
+				}))
+			}
+			
+
+			async function onRegisterClicked() {
+				// ws.send(JSON.stringify({
+				// 	method: 'register',
+				// 	params: {
+				// 		username: 'user1',
+				// 		displayName: 'User One',
+				// 		credNickName: 'user1-browser1'
+				// 	},
+				// 	id: Date.now()
+				// }));
+
+				start();
+			}
+
+			function onLoginClicked() {
+				console.log("login clicked");
+			}
+		</script>
+	</body>
+</html>
