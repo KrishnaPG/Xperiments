@@ -1,5 +1,87 @@
 const streamCollect = require('stream-collector');
 var hyperdb = require('hyperdb')
+const crypto = require('crypto');
+const dht = require('dht-rpc')
+
+function sha256(val) {
+	return crypto.createHash('sha256').update(val).digest()
+}
+const node = dht({
+	ephemeral: false, bootstrap: [
+		'142.93.90.113:54472'
+	] });
+const val = "12345";
+let hex = null;
+node.update('values', sha256(val), val, function (err, res) {
+	if (err) throw err	
+	hex = sha256(val).toString('hex');
+	console.log('Inserted', hex);
+
+	node.query('values', Buffer.from(hex, 'hex'))
+		.on('data', function (data) {
+			if (data.value && sha256(data.value).toString('hex') === hex) {
+				// We found the value! Destroy the query stream as there is no need to continue.
+				console.log(data.value, '-->', data.value.toString())
+				this.destroy()
+			}
+		})
+		.on('end', function () {
+			console.log('(query finished)')
+		});	
+
+})
+
+
+/*
+const dht = require('@hyperswarm/dht')
+const crypto = require('crypto')
+const node = dht({
+	// just join as an ephemeral node
+	// as we are shortlived
+	ephemeral: false
+})
+const topic = Buffer.alloc(32);
+topic.write("Hello");
+const port = 12346;
+// announce a port
+node.announce(topic, { port }, function (err) {
+	if (err) throw err
+
+	// try and find it
+	node.lookup(topic)
+		.on('data', console.log)
+		.on('end', function () {
+			// unannounce it and shutdown
+			node.unannounce(topic, { port }, function () {
+				node.destroy()
+			})
+		})
+})
+*/
+/*
+const DatBackup = require('./dat-backup');
+
+const Hyperdrive = require('hyperdrive');
+
+var archive = Hyperdrive('./.tmp/test-drive1') // content will be stored in this folder
+
+
+archive.writeFile(`t1-${Date.now()}`, (new Date()).toString(), err => {
+	if (err) console.error("writeFile error: ", err);
+	archive.readdir('/', (err, list) => {
+		if (err) console.error("readdir error: ", err);
+		console.log(list);
+		const backupPaths = [];
+		list.forEach(fileName => {
+			console.log("last: ", fileName.slice(-2));
+			const last = Number.parseInt(fileName.slice(-2));
+			if ((last % 2) == 0) backupPaths.push(fileName);
+		});
+		console.log("Taking backup of paths: ", backupPaths);
+	})
+});
+
+
 
 var db = hyperdb('./my.db', { valueEncoding: 'utf-8' });
 
@@ -25,6 +107,7 @@ db.put('/hello', `world-${(new Date()).toLocaleTimeString()}`, function (err) {
 	});
 })
 
+*/
 
 /*
 var hyperdrive = require('hyperdrive')
@@ -98,47 +181,80 @@ function reallyReady(archive, cb) {
 			archive.metadata.update({ ifAvailable: true }, cb)
 		})
 	}
-}
+} 
+
+const { Hypercore, Hyperdrive, resolveName, deleteStorage, destroy } = require('dat-sdk')();
 
 // Create a hypercore
 // Check out the hypercore docs for what you can do with it
 // https://github.com/mafintosh/hypercore
 const myCore = Hypercore(null, {
 	valueEncoding: 'json',
-	persist: false
-})
+	persist: false,
+	// storage can be set to an instance of `random-access-*`
+	// const RAI = require('random-access-idb')
+	// otherwise it defaults to `random-access-web` in the browser
+	// and `random-access-file` in node
+	storage: null  // storage: RAI
+});
+myCore.on("download", (index, data) => {
+	console.log("myCore:download:", index, data);
+});
+myCore.on("sync", () => {
+	console.log("myCore:sync:");
+});
+myCore.on("upload", (index, data) => {
+	console.log("myCore:upload:", index, data);
+});
 
+const myId = Math.ceil(Math.random() * 1000);
 // Add some data to it
 myCore.append(JSON.stringify({
-	name: 'Alice'
+	name: 'Alice' + myId
 }), () => {
+		console.log("myId: ", myId);
+		
+		const buf = Buffer.alloc(32);
+		buf.write("Hello World");
+
 	// Use extension messages for sending extra data over the p2p connection
-	const discoveryCoreKey = 'dat://bee80ff3a4ee5e727dc44197cb9d25bf8f19d50b0f3ad2984cfe5b7d14e75de7'
+	const discoveryCoreKey = buf;//'dat://bee80ff3a4ee5e727dc44197cb9d25bf8f19d50b0f3ad2984cfe5b7d14e75de7'
 	const discoveryCore = new Hypercore(discoveryCoreKey, {
+		persist: false,
 		extensions: ['discovery']
 	})
 
 	// When you find a new peer, tell them about your core
 	discoveryCore.on('peer-add', (peer) => {
-		console.log('Got a peer!', peer)
-		peer.extension('discovery', myCore.key)
+		console.log('Got a peer!');
+		peer.extension('discovery', myCore.key);
 	})
 
 	// When a peer tells you about their core, load it
 	discoveryCore.on('extension', (type, message) => {
-		console.log('Got extension message', type, message)
+		console.log('Got extension message', message);
 		if (type !== 'discovery') return
-		discoveryCore.close()
+		///discoveryCore.close()
 
 		const otherCore = new Hypercore(message, {
 			valueEncoding: 'json',
 			persist: false
-		})
+		});
+		otherCore.on("download", (index, data) => {
+			console.log("otherCore:download:", index, data);
+		});
+		otherCore.on("sync", () => {
+			console.log("otherCore:sync:");
+		});
+		otherCore.on("upload", (index, data) => {
+			console.log("otherCore:upload:", index, data);
+		});
+
 
 		// Render the peer's data from their core
 		otherCore.get(0, console.log)
 	})
-})
+});
 
 const hypertrie = require('hypertrie')
 

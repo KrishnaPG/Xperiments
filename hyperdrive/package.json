@@ -15,9 +15,16 @@
     "pino-pretty": "^2.5.0"
   },
   "dependencies": {
-    "dat-sdk": "^0.3.2",
+    "@hyperswarm/dht": "^3.0.1",
+    "@hyperswarm/discovery": "^1.7.0",
+    "bittorrent-dht": "^9.0.3",
+    "dat-sdk": "^0.3.6",
+    "dht-rpc": "^4.1.7",
+    "discovery-swarm": "^6.0.0",
     "hyperdb": "^3.5.0",
     "hyperdrive": "^10.3.2",
+    "hyperswarm": "^2.3.1",
+    "magnet-uri": "^5.2.4",
     "stream-collector": "^1.0.1"
   }
 }

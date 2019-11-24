@@ -5,6 +5,7 @@
 </template>
 
 <script>
+const Buffer = require('buffer').Buffer;
 const schema1 = {
   "description": "Divide one number by another",
   "type": "method",
@@ -33,15 +34,15 @@ export default {
     msg: String
   },
   mounted: function() {
-    var dht = new DHT()
-    dht.listen(20000, function () {
-      console.log('now listening')
-    })
-    dht.on('peer', function (peer, infoHash, from) {
-      console.log('found potential peer ' + peer.host + ':' + peer.port + ' through ' + from.address + ':' + from.port)
-    })
-    // find peers for the given torrent info hash
-    dht.lookup('e3811b9539cacff680e418124272177c47477157');
+    // var dht = new DHT()
+    // dht.listen(20000, function () {
+    //   console.log('now listening')
+    // })
+    // dht.on('peer', function (peer, infoHash, from) {
+    //   console.log('found potential peer ' + peer.host + ':' + peer.port + ' through ' + from.address + ':' + from.port)
+    // })
+    // // find peers for the given torrent info hash
+    // dht.lookup('e3811b9539cacff680e418124272177c47477157');
 
 
     var client = new WebTorrent();
@@ -69,6 +70,26 @@ export default {
       ipfs.dag.get(cid2, "/params", (error, result) => {
         console.log("dag get: ", error, result);
       })
+    })
+
+    const id = Math.ceil(Math.random() * 1000);
+    console.log("my id: ", id);
+
+    ipfs.pubsub.subscribe("hello", msg => {
+      console.log(`${id} received message on hello: `, msg.data.toString("utf8"), msg);
+    })
+
+    setInterval(() => {
+      ipfs.pubsub.publish("hello", Buffer.from(`from: ${id} @ ${(new Date()).toLocaleString()}`, "utf8"));
+    }, 1500);
+
+    const cid = 'QmS4ustL54uo8FzR9455qaxZwuMiUhyvMcX9Ba8nUH4uVv';
+
+    ipfs.dht.provide(new Cids(cid), error => {
+      console.log("provide : ", cid, error);
+    })
+    ipfs.dht.findProvs(new Cids("bafybeig6xv5nwphfmvcnektpnojts33jqcuam7bmye2pb54adnrtccjlsu"), {}, (err, peerInfo) => {
+      console.log("findProviders err:", err, ", peerinfo: ", peerInfo);
     })
   }
 }

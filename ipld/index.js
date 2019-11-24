@@ -80,9 +80,9 @@ async function setRepo() {
       .then(() => {
         // console.log('\n\nStopping the node')
         // return node.stop()
-        node.files.ls("/", (err, output) => {
-          console.log("/ listing: ", err, output);
-        })
+        // node.files.ls("/", (err, output) => {
+        //   console.log("/ listing: ", err, output);
+        // })
         // The address of your files.
         const addr = '/ipfs/QmbezGequPwcsWo8UL4wDF6a8hYwM1hmbzYv2mnKkEWaUp'
 
@@ -97,6 +97,15 @@ async function setRepo() {
         const gateway = new Gateway(node)
         return gateway.start()
       })
+      .then(() => {
+        const cid = new CID('bafybeig6xv5nwphfmvcnektpnojts33jqcuam7bmye2pb54adnrtccjlsu');
+        node.dht.provide(cid, error => {
+          console.log("provide : ", error);
+        });
+        ipfs.dht.findProviders("QmS4ustL54uo8FzR9455qaxZwuMiUhyvMcX9Ba8nUH4uVv", {}, (err, peerInfo) => {
+          console.log("findProviders err:", err, ", peerinfo: ", peerInfo);
+        })        
+      })
       // Let users know where they can inspect the repo
       .then(() => {
         console.log('Check "/tmp/custom-repo/.ipfs" to see what your customized repository looks like on disk.')
@@ -105,8 +114,8 @@ async function setRepo() {
 }
 
 // linkNodes();
-// setRepo();
-
+setRepo();
+/*
 var ipfsClient = require('ipfs-http-client')
 
 // example cid to pin
@@ -151,3 +160,4 @@ ipfs.block.put(Buffer.from("Hello " + Date()), (err, block) => {
   }
   console.log("put block: ", block);
 })
+*/

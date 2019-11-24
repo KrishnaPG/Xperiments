@@ -9,8 +9,8 @@ https://github.com/ipfs/interface-js-ipfs-core/blob/master/SPEC/DAG.md#ipfsdagpu
 */
 async function linkNodes() {
 	//Connecting ipfs instance to infura node. You can also use your local node.
-	const ipfs = new ipfsClient({ host: '127.0.0.1', port: '5002', protocol: 'http' });
-	//const ipfs = new ipfsClient({ host: 'ipfs.infura.io', port: '5001', protocol: 'https' });
+	//const ipfs = new ipfsClient({ host: '127.0.0.1', port: '5002', protocol: 'http' });
+	const ipfs = new ipfsClient({ host: 'ipfs.infura.io', port: '5001', protocol: 'https' });
 	//const ipfs = new ipfsClient({ host: 'cloudflare-ipfs.com', port: '443', protocol: 'https' });
 
 	let cid1 = await ipfs.dag.put({ name: "vasa" }, { format: 'dag-cbor', hashAlg: 'sha2-256' });
