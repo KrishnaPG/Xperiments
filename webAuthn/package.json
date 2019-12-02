@@ -1,19 +1,33 @@
 {
-  "name": "webauthn",
-  "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
   "scripts": {
-    "dev": "set NODE_ENV=dev& nodemon --max_old_space_size=100 --inspect=0.0.0.0:9254 ./server.js",
-    "debug": "set NODE_ENV=dev& set DEBUG=* & nodemon --inspect-brk=9254 ./server.js"
+    "dev": "vue-cli-service serve",
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build"
   },
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "fido2-lib": "^2.1.1",
-    "ws": "^7.2.0"
+    "bittorrent-dht": "^9.0.3",
+    "buffer": "^5.4.3",
+    "dat-sdk": "^0.3.6",
+    "magnet-uri": "^5.2.4",
+    "typedarray-to-buffer": "^3.1.5"
   },
   "devDependencies": {
-    "nodemon": "^1.19.4"
-  }
+    "@vue/cli-service": "^4.0.0",
+    "less": "^3.0.4",
+    "less-loader": "^5.0.0",
+    "vue": "^2.6.10",
+    "vue-template-compiler": "^2.6.10"
+  },
+  "postcss": {
+    "plugins": {
+      "autoprefixer": {}
+    }
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions"
+  ]
 }

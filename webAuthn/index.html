@@ -1,6 +1,7 @@
 <html>
 	<script src="https://unpkg.com/ipld-dag-cbor/dist/index.min.js"></script>
 	<script src="https://bundle.run/buffer@5.4.3"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
 	<body>
 		<button onclick="onRegisterClicked()">Register</button>
 		<br/>
@@ -8,16 +9,12 @@
 		<h2 id="status">Not Connected to WS</h2>
 		<script>
 			const Buffer = buffer.Buffer;
-			const ws = new WebSocket("ws://127.0.0.1:9090"); // ws://127.0.0.1:9090
-			ws.onopen = event => {
-				document.getElementById('status').textContent = `Connected @ ${new Date()})`
-				ws.send(JSON.stringify({ method: 'echo', msg: "Hello World" }));
-			};
-			ws.onmessage = event => {
-				console.log("received from server: ", event);
-				const response = JSON.parse(event.data);
-				console.log("response from server: ", response);
-			};
+			// Create a websocket connecting to our Feathers server
+			const socket = io('http://localhost:9090', { transports: ['websocket'], upgrade: false });  // by specifying the transport and upgrade-false, we are enabling cluster scaling. Android old browsers may not support this
+			// Listen to new messages being created
+			socket.on('signup created', message => {
+				console.log('Someone created a signup', message);
+			});
 
 			async function start() {
 				const publicKeyCredentialCreationOptions = {
@@ -77,7 +74,17 @@
 				// 	id: Date.now()
 				// }));
 
-				start();
+				socket.emit('get', 'signup', (error, result) => {
+					if (error) throw error
+					console.log("signup challenge: ", result);
+					
+					socket.emit('create', 'signup', (error, messageList) => {
+						if (error) throw error
+						console.log('Current messages', messageList);
+					});
+				});
+
+				//start();
 			}
 
 			function onLoginClicked() {
