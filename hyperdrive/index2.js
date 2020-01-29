@@ -1,47 +1,56 @@
 const streamCollect = require('stream-collector');
 var hyperdb = require('hyperdb')
 
-const crypto = require('crypto');
-const dht = require('dht-rpc')
-// Set ephemeral: true so other peers do not add us to the peer list, simply bootstrap
-const bootstrap = dht({ ephemeral: false })
-bootstrap.listen(10001)
-function createNode() {
-	const node = dht({
-		bootstrap: [
-			'142.93.90.113:54472'
-		]
-	})
-	const values = new Map()
-	node.command('values', {
-		// When we are the closest node and someone is sending us a "store" command
-		update(query, cb) {
-			if (!query.value) return cb()
-			// Use the hash of the value as the key
-			const key = sha256(query.value).toString('hex')
-			values.set(key, query.value)
-			console.log('Storing', key, '-->', query.value.toString())
-			cb()
-		},
-		// When someone is querying for a "lookup" command
-		query(query, cb) {
-			const value = values.get(query.target.toString('hex'))
-			cb(null, value)
-		}
-	})
+//const DatBackup = require('./dat-backup');
+
+const SDK = require('dat-sdk')
+const { Hypercore, Hyperdrive, resolveName, deleteStorage, destroy } = SDK({
+	storageOpts: { storageLocation: './.tmp/client' }
+});
+
+const ExtName = "Fict.Dat.RPC";
+
+var archive = Hyperdrive('e8474fb2df40812eac9babbfe4d9369f72fa63cec6c058f8626cdde6deecfb65', {
+	persist: true,
+	createIfMissing: false,
+	//extensions: [ExtName]
+});
+
+reallyReady(archive, () => {
+	archive.readdir('/', console.log);
+	archive.on('peer-add', (peer) => {
+		console.log("peer added: ", peer);
+	});	
+})
+// This make sure you sync up with peers before trying to do anything with the archive
+function reallyReady(archive, cb) {
+	if (archive.metadata.peers.length) {
+		archive.metadata.update({ ifAvailable: true }, cb)
+	} else {
+		archive.metadata.once('peer-add', peer => {
+			console.log("meta peer-add: ", peer);
+			archive.metadata.update({ ifAvailable: true }, cb)
+		})
+	}
 }
-function sha256(val) {
-	return crypto.createHash('sha256').update(val).digest()
-}
 
-createNode();
+archive.readFile('/example.txt', 'utf8', (err, data) => {
+	if (err) throw err
+	console.log(`content of example.txt: ${data}`);
+
+	archive.on('update', () => {
+		console.log("archive updated: ", archive.version);
+	});
 
 
-const DatBackup = require('./dat-backup');
-
-const Hyperdrive = require('hyperdrive');
-
-var archive = Hyperdrive('./.tmp/test-drive2') // content will be stored in this folder
+	// archive.close((err) => {
+	// 	if (err) throw err
+	// 	deleteStorage(archive.key, (e) => {
+	// 		if (e) throw e
+	// 		console.log('Deleted beaker storage')
+	// 	})
+	// })
+})
 
 // archive.writeFile(`t2-${Date.now()}`, (new Date()).toString(), err => {
 // 	if(err) console.error("writeFile error: ", err);

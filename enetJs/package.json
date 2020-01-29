@@ -1,0 +1,62 @@
+{
+  "name": "enetjs",
+  "version": "1.0.0",
+  "description": "JS Wrapper for the Reliable UDP eNet package",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [
+    "eNet",
+    "RUDP",
+    "udp",
+    "networking"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "cross-env": "^6.0.3",
+    "eslint": "6.7.2",
+    "nodemon": "^2.0.1"
+  },
+  "eslintConfig": {
+    "env": {
+      "browser": true,
+      "es2020": true,
+      "node": true,
+      "jest": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2018
+    },
+    "extends": "eslint:recommended",
+    "ignorePatterns": [
+      "node_modules/"
+    ],
+    "rules": {
+      "indent": [
+        "error",
+        "tab"
+      ],
+      "linebreak-style": [
+        "error",
+        "windows"
+      ],
+      "no-unused-vars": [
+        "error",
+        {
+          "argsIgnorePattern": "^_"
+        }
+      ],
+      "semi": [
+        "error",
+        "always"
+      ]
+    }
+  },
+  "dependencies": {
+    "@hyperswarm/discovery": "^1.7.0",
+    "enet": "^0.2.9",
+    "exit-hook": "^2.2.0",
+    "sodium-native": "^2.4.9",
+    "why-is-node-running": "^2.1.0"
+  }
+}

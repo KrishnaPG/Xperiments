@@ -3,6 +3,42 @@ var hyperdb = require('hyperdb')
 const crypto = require('crypto');
 const dht = require('dht-rpc')
 
+const SDK = require('dat-sdk')
+const { Hypercore, Hyperdrive, resolveName, deleteStorage, destroy } = SDK();
+
+const ExtName = "Fict.Dat.RPC";
+
+const archive = Hyperdrive("e8474fb2df40812eac9babbfe4d9369f72fa63cec6c058f8626cdde6deecfb65", {
+	// This archive will disappear after the process exits
+	// This is here so that running the example doesn't clog up your history
+	persist: true,
+	createIfMissing: false,
+	// storage can be set to an instance of `random-access-*`
+	// const RAI = require('random-access-idb')
+	// otherwise it defaults to `random-access-web` in the browser
+	// and `random-access-file` in node
+	//storage: null,  //storage: RAI,
+	//extensions: [ExtName]
+})
+
+archive.on('ready', () => {
+	const url = `dat://${archive.key.toString('hex')}`
+	console.log(`Here's your URL: ${url}`, "discovery key: ", archive.discoveryKey.toString('hex'), " version: ", archive.version);
+
+	setInterval(() => {
+		const str = `world-${(new Date()).toLocaleTimeString()}`;
+		archive.writeFile('/example.txt', str, () => {
+			console.log('Written example file!', str);
+		})
+	}, 10000);
+
+	archive.on('peer-add', (peer) => {
+		console.log("peer added: ", peer);
+	});	
+});
+
+/*
+
 function sha256(val) {
 	return crypto.createHash('sha256').update(val).digest()
 }
@@ -32,7 +68,7 @@ node.update('values', sha256(val), val, function (err, res) {
 })
 
 
-/*
+
 const dht = require('@hyperswarm/dht')
 const crypto = require('crypto')
 const node = dht({
