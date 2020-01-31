@@ -4,7 +4,92 @@
  */
 const ActiveHandles = require('why-is-node-running') // should be your first require
 const Discovery = require('@hyperswarm/discovery');
+const ENet = require('enet');
 const { performance } = require('perf_hooks');
+
+class UDPConnection  {
+	constructor(peer) {
+		this.onConnected(peer);
+	}
+	onConnected(peer) {
+		this.peer = peer;
+		peer.once("disconnect", () => this.reconnect()); // whenever disconnected, establish a new connection again
+		this.nReconnectAttempt = 0; // reset the counter		
+	}
+	reconnect() {
+		if (this.closed) return false;
+		const { address: host, port } = this.peer.address();
+		this.peer._host.connect(address, 1/* channel */, 0, (err, peer) => {
+			if (err) {
+				this.reconnectTimer = setTimeout(() => this.reconnect(), ++this.nReconnectAttempt * 1000);
+			} else
+				this.onConnected(peer);
+		});
+	}
+	close() {
+		this.closed = true;
+		this.peer.disconnectNow();
+		if (this.reconnectTimer) {
+			clearTimeout(this.reconnectTimer);
+			this.reconnectTimer = null;
+		}
+	}
+	send(data, cb) {
+		process.nextTick(() => this.peer._host._service()); // force event loop once (since we use larger wait poll)
+		return this.peer.send(0 /*channel*/, data, cb);
+	}
+	request(method, params, timeout, cb) {
+		const id = (Math.random() * Date.now()).toString();
+		if (this.send({ jsonrpc: "2.0", method, params, id }, cb)) return false; // send failed
+	}
+};
+
+class UDPClient {
+	constructor(eNetClient) {
+		this.client = eNetClient;
+		this.connectReqs = {}; // successful or in-progress requests till now; Maps {<hostname:port> -> Promise<connection>}
+	}
+	/**
+	 * Creates a Client instance
+	 * @param {integer} maxPeers - no. of maximum simultaneous servers this client can connect at a time
+	 * @param {integer} maxChannels - no. of total channels available for the peers
+	 */
+	static create(maxPeers = 32, maxChannels = 64) {
+		return new Promise((resolve, reject) => {
+			ENet.createClient({ peers: maxPeers, channels: maxChannels, down: 0, up: 0 }, (err, client) => {
+				if (err) return reject(err);
+				client.start(500); // poll at 500ms
+				resolve(new UDPClient(client));
+			});
+		});
+	}
+	connectTo({ host, port }, channels = 1, data = 0) {
+		const connString = `${host}:${port}`;
+		// if a previously resolved, or in-progress request is available, return it;
+		// This way, we do not create multiple connections to the same <host:port>;
+		const req = this.connectReqs[connString];
+		if (req) return req;
+		// Either no previous attempt was made, or previous attempt failed (hence promise removed from the q);
+		// make a fresh request (again)
+		return this.connectReqs[connString] = new Promise((resolve, reject) => {
+			this.client.connect(new ENet.Address(host, port), channels, data, (err, peer) => {
+				if (err) {
+					// remove it so that next time fresh connection attempt can be made again
+					this.connectReqs[connString] = null; 
+					return reject(err);
+				}
+				// successfully connected, keep the promise in this.connectReqs{} and resolve it
+				return resolve(new UDPConnection(peer));
+			});
+		});
+	}
+	close() {
+		this.client.destroy();
+		this.client = null;
+	}
+};
+
+const udpClient = UDPClient.create();
 
 const DISCO_BOOTSTRAP = [
 	'bootstrap1.hyperdht.org:49737',
@@ -12,7 +97,39 @@ const DISCO_BOOTSTRAP = [
 	'bootstrap3.hyperdht.org:49737'
 ];
 
-class LocatorMetricsNone {
+class ConnectionManager {
+	constructor() {
+		// current active connections for each targetKey. Maps { targetKey -> one connection }
+		this.connections = {}; // peers validated successfully
+		// current rejections for each targetKey. Maps { targetKey -> [] of rejected {host, port} objects }
+		this.rejections = {}; // peers connected but validation failed (could go into blacklist)
+	}
+	addConnection(targetKey, conn) {
+		const oldConn = this.connections[targetKey];
+		if (oldConn) oldConn.close();
+		this.connections[targetKey] = conn;
+	}
+	getConnection(targetKey) {
+		const conn = this.connection[targetKey];
+		if (conn & conn.state()) return conn;
+		return null;
+	}
+	close() {
+		Object.keys(this.connections).forEach(key => this.connections[key].close());
+		this.connections = {};
+	}
+	addRejection(peerInfo, targetKey) {
+		if (!this.rejections[targetKey]) this.rejections[targetKey] = [];
+		this.rejections[targetKey].push(peerInfo);
+	}
+	hasPeerBeenRejected({ host, port, local }, targetKey) {
+		const keyRejections = this.rejections[targetKey];
+		const index = keyRejections.findIndex(peer => peer.host == host && peer.port == port);
+		return index < 0 ? false : true;
+	}
+}
+
+class LocatorMetricsNone extends ConnectionManager {
 	getBootstrapServers(def = [] ) {
 		return Promise.resolve(def);
 	}
@@ -38,59 +155,57 @@ class LocatorMetricsNone {
 	 * online but announce wrong results (crypto verification fails).
 	 */
 	isPeerBlacklisted({ port, host, local, referrer }) {
+		// TODO: check if blacklisted as per database. This does NOT include
+		// active rejections in this session for a particular key. 
+		// Blacklists are irrespective of target key. They are blanket rejections
+		// based on IP or CIDR.  Rejections are specific to a key (and 
+		// other keys might have worked for the same host!!). We do NOT check
+		// rejections specific to a key here.
 		return local ? Promise.reject(true) : Promise.resolve(false);
 	}
 	/**
 	 * Verifies if the peer is valid owner of the said targetKey.
 	 */
-	isPeerValid({ port, host, local, referrer }, targetKey) {
+	isPeerValid(peerInfo, targetKey) {
 		// 1. check if duplicate (pending validation / ongoing validation)
 		// 2. check if previously validated
 		// 3. connect and ask if it is valid
-		return Promise.resolve(true);
+		return this.isPeerBlacklisted(peerInfo).then(blacklisted => {
+			if (blacklisted || this.hasPeerBeenRejected(peerInfo)) return null;
+			// peer was not blacklisted, nor rejected earlier for this key;
+			// connect to it and validate the public key
+			return udpClient.connectTo(peerInfo).then(conn => {
+
+			}).catch(err => null);
+		});
 	}
-	recordEntry(peer, targetKey, timeSpent) {
+	recordEntry(targetKey, conn, timeSpent) {
+		this.addConnection(targetKey, conn);
+		// TODO:
 		// 1. add referrer to bootstrap nodes
 		// 2. save the { targetKey -> peer } mapping, along with the current timestamp (last accessed)
 		// 3. save the timeSpent performance metric
 	}
 	close() {
-		// shutdown any database connections and cleanup the resources
+		super.close();
+		// TODO: shutdown any database connections and cleanup the resources
 	}
 };
 
-class LookupTracker {
-	constructor(targetKey, metrics) {
-		this.targetKey = targetKey;
-		this.metrics = metrics;
+class Tracker {
+	constructor() {
 		this.p = new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
-		this.candidates = {}; // TODO: how about trie?
 		this.finished = this.cancelled = false;
 		this.tStart = performance.now();
 	}
-	// returns true if peer is found / search cancelled
-	onPeer(peer) {
-		if (this.finished || this.cancelled) return Promise.resolve(true);
-		// check if referrer is blacklisted
-		return this.metrics.isReferrerBlacklisted(peer.referrer).then(referrerBlacklisted => {
-			if (referrerBlacklisted || this.candidates[peer.host + ":" + peer.port]) return false; // ignore duplicates
-			this.candidates[peer.host + ":" + peer.port] = {};
-			this.metrics.isPeerBlacklisted(peer).then(peerBlacklisted => {
-				if (peerBlacklisted) return false;
-				// check if peer is valid for the given key
-				this.metrics.isPeerValid(peer, targetKey).then(valid => {
-					if (!valid) return false;
-					this.tEnd = performance.now();
-					this.finished = true;
-					this.resolve(peer);
-					this.metrics.recordEntry(peer, targetKey, this.timeSpent());
-					return true; // found a peer, finally
-				});
-			});
-		});
+	finish(result) {
+		if (this.isInProgress() == false) return;
+		this.tEnd = performance.now();
+		this.finished = true;
+		this.resolve(result);
 	}
 	cancel(reason) {
-		if (this.finished) return;
+		if (this.isInProgress() == false) return;
 		this.tEnd = performance.now();
 		this.cancelled = true;
 		this.reject(reason);
@@ -101,28 +216,58 @@ class LookupTracker {
 	timeSpent() {
 		return (this.tEnd ? this.tEnd : performance.now()) - this.tStart;
 	}
+};
+
+class LookupTracker extends Tracker {
+	constructor(targetKey, metrics) {
+		super();
+		this.targetKey = targetKey;
+		this.metrics = metrics;
+		this.candidates = {}; // TODO: how about trie?
+	}
+	// returns true if peer is found / search cancelled
+	onPeer(peerInfo) {
+		if (this.isInProgress() == false) return Promise.resolve(true);
+		return this.metrics.isReferrerBlacklisted(peerInfo.referrer).then(referrerBlacklisted => {
+			const connString = peerInfo.host + ":" + peerInfo.port;
+			if (referrerBlacklisted || this.candidates[connString]) return false; // ignore duplicates
+			this.candidates[connString] = {};
+			return this.metrics.isPeerValid(peerInfo, targetKey).then(connection => {
+				if (!connection) return false;
+				this.finish(connection);
+				this.metrics.recordEntry(targetKey, connection, this.timeSpent());
+				return true; // found a peer, finally
+			});
+		});
+	}
 }
 
 class HyperDiscoveryLookup {
 	constructor(d, targetKey, timeout, tracker) {
-		const topic = d.lookup(targetKey);
-		topic.on('peer', peer => tracker.onPeer(peer));
-		topic.on('update', () => {
+		this.nRetryAttempt = 0;
+		this.topic = d.lookup(targetKey);
+		this.topic.on('peer', peer => tracker.onPeer(peer)); // we do NOT consider timeouts while peers are being listed
+		this.topic.on('update', () => {
 			if (!tracker.isInProgress()) return;
-			// tracker is running, but discovery is complete - this means lookup failed. Start again or cancel
+			// tracker is running, but discovery is complete - this means lookup failed. Try again or cancel
 			const waitPeriod = 5000 * ++this.nRetryAttempt;
 			if (tracker.timeSpent() + waitPeriod >= timeout)
 				tracker.cancel(new Error(`Timeout - lookup did not find any results in ${timeout}ms`));
 			else
-				this.retryTimer = setTimeout(() => topic.update(), waitPeriod);
+				this.retryTimer = setTimeout(() => this.topic.update(), waitPeriod);
 		});
-		this.topic = topic;
-		this.nRetryAttempt = 0;
+		// whenever tracker completes / cancels, stop the discovery
+		tracker.p.finally(() => this.close());
 	}
 	close() {
-		if (this.retryTimer) clearTimeout(this.retryTimer);
-		this.topic.destroy();
-		this.topic = null;
+		if (this.retryTimer) {
+			clearTimeout(this.retryTimer);
+			this.retryTimer = null;
+		}		
+		if (this.topic) {
+			this.topic.destroy();
+			this.topic = null;
+		}
 	}
 }
 
@@ -130,6 +275,7 @@ class Locator {
 	constructor(d, m) {
 		this.disco = d;
 		this.metrics = m;
+		this.activeTrackers = {};
 	}
 	static create({
 		ephemeral = true,
@@ -140,20 +286,45 @@ class Locator {
 			new Locator(Discovery({ ephemeral, bootstrap }), locatorMetrics)
 		);
 	}
-	findOwner(pubKeyBuf, timeout = 30000) {
-		if (!pubKeyBuf || pubKeyBuf.length != 32)
-			throw new Error("pubKeyBuf should be a publicKey buffer of length 32 bytes");
+	findOwner(pubKey, timeout = 30000) {
+		if (!pubKey || typeof pubKey !== "string")
+			throw new Error("pubKey should be a base64 encoded publicKey string");
 		
-		const tracker = new LookupTracker(pubKeyBuf, this.metrics);
-		const hdLookup = new HyperDiscoveryLookup(this.disco, pubKeyBuf, timeout, tracker); // TODO: add other discovery lookups here
+		// check if an active connection already exists to the owner of the target.
+		// This conn was recorded in the connection manager the last time the search was successful (LookupTracker::onPeer method).
+		const conn = this.metrics.getConnection(targetKey);
+		if (conn) return Promise.resolve(conn);
 		
-		return tracker.p.finally(() => hdLookup.close());
+		// if a search going on for the same key, return that promise.
+		// On success the promise resolves to an active connection to the owner, also
+		// gets recorded into the connection manager (LookupTracker::onPeer method).
+		const activeTracker = this.activeTrackers[pubKey];
+		if (activeTracker && activeTracker.isInProgress()) return activeTracker.p;
+		
+		const tracker = this.activeTrackers[pubKey] = new LookupTracker(pubKey, this.metrics);
+		const hdLookup = new HyperDiscoveryLookup(this.disco, pubKey, timeout, tracker); // TODO: add other discovery lookups here
+		// TODO: in parallel lookup the metrics database to connect last known IP for the owner (use the same tracker)
+		//	1. read the last known ip from the DB, and use tracker.onPeer(<ip>)
+		//		 if the ip resolves, then it will call finish() and stops all the searches for it
+
+		return tracker.p.finally(() => { this.activeTrackers[pubKey] = null; });
 	}
 	close() {
 		this.disco.destroy();
 		this.disco = null;
 		this.metrics.close();
 		this.metrics = null;
+	}
+	invoke(didMethod, params, cb) {
+		// 1. get targetKey and methodName from didMethod
+		const targetKey = Buffer.from("1696a0b9268596cc1d9257e6e49715aa0999a7ce1fc86b04e209f966d097c08d", "hex");
+		const methodName = ".disco";
+		// get a connection to the owner of the key
+		return this.findOwner(targetKey, tracker).then(connection => {
+			// make RPC call on the connection and return the ID
+			
+			// returns the id of RPC call
+		});
 	}
 }
 
