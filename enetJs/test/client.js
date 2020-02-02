@@ -5,42 +5,111 @@
 const ActiveHandles = require('why-is-node-running') // should be your first require
 const Discovery = require('@hyperswarm/discovery');
 const ENet = require('enet');
+const Errors = require('@feathersjs/errors'); // TODO: replace with { Errors } = require('@fict/core')
+const EventEmitter = require('events');
+const PriorityQ = require('fastpriorityqueue');
 const { performance } = require('perf_hooks');
 
-class UDPConnection  {
-	constructor(peer) {
-		this.onConnected(peer);
-	}
-	onConnected(peer) {
-		this.peer = peer;
-		peer.once("disconnect", () => this.reconnect()); // whenever disconnected, establish a new connection again
-		this.nReconnectAttempt = 0; // reset the counter		
-	}
-	reconnect() {
-		if (this.closed) return false;
-		const { address: host, port } = this.peer.address();
-		this.peer._host.connect(address, 1/* channel */, 0, (err, peer) => {
-			if (err) {
-				this.reconnectTimer = setTimeout(() => this.reconnect(), ++this.nReconnectAttempt * 1000);
-			} else
-				this.onConnected(peer);
-		});
+class TimeBoundTrackers extends PriorityQ {
+	constructor(cleanUpIntervalMS = 1000) {
+		super((a, b) => a.expiresAt < b.expiresAt);
+		this.cleanUpTimer = setInterval(() => {
+			let el = this.peek();
+			while (el && el.expiresAt <= performance.now()) {
+				this.poll(); // remove the top element; (so that in the cancel's callback below, caller cannot remove it again)
+				el.tracker.cancel(new Errors.Timeout(`Timeout`));
+				el = this.peek();
+			}
+		}, cleanUpIntervalMS);
 	}
 	close() {
+		if (this.cleanUpTimer) {
+			clearInterval(this.cleanUpTimer);
+			this.cleanUpTimer = null;
+		}
+	}
+};
+// TODO: close() this when ??
+const gRPCRequestExpiryQ = new TimeBoundTrackers(); // Only use this in conjunction with RPCRequestTracker::setExpiry(); Do not mix different tracker types.
+
+class UDPConnection extends EventEmitter  {
+	constructor(peer) {
+		this.peer = peer;
+		peer.once("disconnect", () => this.close()); // whenever disconnected, close the connection
+		peer.on("message", (packet, channel) => this.onMessage(packet, channel));
+		/*
+			we do not try to reconnect inside here, for two reasons:
+				1. when reconnection happens we have to verify the publicKey again to ensure 
+					the host is still valid. It is possible that ip-address was assigned to some other
+					machine during the reconnect trials, and we do not want to just reconnect and pretend
+					the machine is valid. The problem is, in this class we do not have access to the
+					publicKey for which this connection is made. Besides, it is possible that this
+					same connection is being used for multiple publicKeys (targetKey->conn mapping inside ConnectionManager).
+				2. the peers could be just roaming around and the host may move into a different
+					subnet. Trying to reconnect to the same old ip would not make sense. Before disconnecting,
+					the peer may indicate a "future ip", which the LocatorMetrics can keep track of and
+					connect to when a new findOwner() lookup is called. Else, for stable hosts the LocatorMetrics
+					keeps track of "recent know ip" addresses, and tries them during the findOwner() lookups.
+
+			For these reasons, we move the reconnection to the Locator, where it determines (based on 
+				the pending no.of RPCs etc.) if reconnection should be made or not. The flow
+				there takes care of validating the peer, as well as deciding the best "known" ip or 
+				"future" ip or just discover afresh.
+		*/
+	}
+	close() {
+		if (this.closed) return;
 		this.closed = true;
 		this.peer.disconnectNow();
-		if (this.reconnectTimer) {
-			clearTimeout(this.reconnectTimer);
-			this.reconnectTimer = null;
-		}
+		this.emit("closed");
+	}
+	isActive() {
+		if (this.closed) return 0;
+		return this.peer.state() == ENet.PEER_STATE.CONNECTED;
 	}
 	send(data, cb) {
 		process.nextTick(() => this.peer._host._service()); // force event loop once (since we use larger wait poll)
 		return this.peer.send(0 /*channel*/, data, cb);
 	}
-	request(method, params, timeout, cb) {
-		const id = (Math.random() * Date.now()).toString();
-		if (this.send({ jsonrpc: "2.0", method, params, id }, cb)) return false; // send failed
+	/**
+	 * @returns a tracker that allows cancel() of the request. It holds a promise
+	 * that resolves when the request has a response, and rejects when an error happens 
+	 * or timeout is reached.
+	 */
+	request(method, params, timeoutMS = 5000) {
+		return new Promise((resolve, reject) => {
+			const tracker = new RPCRequestTracker({ jsonrpc: "2.0", method, params });
+			this.send(tracker.req(), (err, sendResult) => {
+				if (err) return reject(err); // send failed
+				// send queued, now caller can wait on tracker.p<> promise to resolve for result;
+				// Also tracker.p<> rejects with TIMEOUT error if timeout is specified (0 disables the timeout)
+				if (timeoutMS) tracker.setExpiry(timeoutMS, gRPCRequestExpiryQ);
+				resolve(tracker);
+			});
+		});
+	}
+	onMessage(pkt, _channel) {
+		console.log("message received: ", pkt);
+		process.nextTick(() => this.peer._host._service()); // force event loop once (since we use larger wait poll)
+	}
+};
+
+class RPCRequestTracker extends Tracker {
+	constructor(req) {
+		super();
+		this._req = req;
+		this._req.id = (Math.random() * this.tStart).toString();
+	}
+	setExpiry(timeoutMS, expiryQ) {
+		expiryQ.add({ expiresAt: this.tStart + timeoutMS, tracker: this });
+		this.p.then(() => expiryQ.removeOne(el => el.tracker._req.id == this._req.id)); // if it is finished before timeout, remove from the queue
+		this.p.catch(err => {
+			// if it is time-expired, see if we have to retry again (no need to remove from queue explicitly)
+		});
+	}
+	get req() { return this._req }
+	finish() {
+		throw new Errors.MethodNotAllowed(`RPCRequestTracker.Finish() can not be called directly !!`);
 	}
 };
 
@@ -64,6 +133,7 @@ class UDPClient {
 		});
 	}
 	connectTo({ host, port }, channels = 1, data = 0) {
+		if (!this.client) return Promise.reject(new Error(`connectTo[${host}:${port}]: UDPClient not active`));
 		const connString = `${host}:${port}`;
 		// if a previously resolved, or in-progress request is available, return it;
 		// This way, we do not create multiple connections to the same <host:port>;
@@ -75,17 +145,21 @@ class UDPClient {
 			this.client.connect(new ENet.Address(host, port), channels, data, (err, peer) => {
 				if (err) {
 					// remove it so that next time fresh connection attempt can be made again
-					this.connectReqs[connString] = null; 
+					delete this.connectReqs[connString]; 
 					return reject(err);
 				}
 				// successfully connected, keep the promise in this.connectReqs{} and resolve it
-				return resolve(new UDPConnection(peer));
+				const conn = new UDPConnection(peer);
+				conn.once("closed", () => delete this.connectReqs[connString]);
+				return resolve(conn);
 			});
 		});
 	}
 	close() {
-		this.client.destroy();
-		this.client = null;
+		if (this.client) {
+			this.client.destroy(); // will in turn destroy all peers and emits 'disconnect' on each of them which invokes UDPConnection::close() for each
+			this.client = null;
+		}
 	}
 };
 
@@ -103,6 +177,7 @@ class ConnectionManager {
 		this.connections = {}; // peers validated successfully
 		// current rejections for each targetKey. Maps { targetKey -> [] of rejected {host, port} objects }
 		this.rejections = {}; // peers connected but validation failed (could go into blacklist)
+		// TODO: somehow cleanup closed connections !! Should we handle the "closed" event?
 	}
 	addConnection(targetKey, conn) {
 		const oldConn = this.connections[targetKey];
@@ -111,7 +186,7 @@ class ConnectionManager {
 	}
 	getConnection(targetKey) {
 		const conn = this.connection[targetKey];
-		if (conn & conn.state()) return conn;
+		if (conn & conn.isActive()) return conn;
 		return null;
 	}
 	close() {
@@ -175,7 +250,10 @@ class LocatorMetricsNone extends ConnectionManager {
 			// peer was not blacklisted, nor rejected earlier for this key;
 			// connect to it and validate the public key
 			return udpClient.connectTo(peerInfo).then(conn => {
-
+				conn.request("hello", {}, (err, response) => {
+					console.log("err: ", err, ", response:", response);
+					if(err)
+				});
 			}).catch(err => null);
 		});
 	}
@@ -304,8 +382,9 @@ class Locator {
 		const tracker = this.activeTrackers[pubKey] = new LookupTracker(pubKey, this.metrics);
 		const hdLookup = new HyperDiscoveryLookup(this.disco, pubKey, timeout, tracker); // TODO: add other discovery lookups here
 		// TODO: in parallel lookup the metrics database to connect last known IP for the owner (use the same tracker)
-		//	1. read the last known ip from the DB, and use tracker.onPeer(<ip>)
+		//	1. read the last known ips from the DB, and use tracker.onPeer(<ip>) on each of them
 		//		 if the ip resolves, then it will call finish() and stops all the searches for it
+		//	2. also check if any "future" ip was mentioned by peer (before last disconnect), and try that as well.
 
 		return tracker.p.finally(() => { this.activeTrackers[pubKey] = null; });
 	}

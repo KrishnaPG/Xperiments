@@ -53,9 +53,11 @@
     }
   },
   "dependencies": {
+    "@feathersjs/errors": "^4.5.1",
     "@hyperswarm/discovery": "^1.7.0",
     "enet": "^0.2.9",
     "exit-hook": "^2.2.0",
+    "fastpriorityqueue": "^0.6.3",
     "sodium-native": "^2.4.9",
     "why-is-node-running": "^2.1.0"
   }
