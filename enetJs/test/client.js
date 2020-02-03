@@ -2,13 +2,41 @@
  * Copyright © 2020 Cenacle Research India Private Limited.
  * All Rights Reserved.
  */
-const ActiveHandles = require('why-is-node-running') // should be your first require
+// const ActiveHandles = require('why-is-node-running') // should be your first require
 const Discovery = require('@hyperswarm/discovery');
 const ENet = require('enet');
 const Errors = require('@feathersjs/errors'); // TODO: replace with { Errors } = require('@fict/core')
 const EventEmitter = require('events');
+const MultiBase = require('multibase');
 const PriorityQ = require('fastpriorityqueue');
 const { performance } = require('perf_hooks');
+
+class Tracker {
+	constructor() {
+		this.p = new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
+		this.finished = this.cancelled = false;
+		this.tStart = performance.now();
+	}
+	finish(result) {
+		if (this.isInProgress() == false) return;
+		this.tEnd = performance.now();
+		this.finished = true;
+		this.resolve(result);
+	}
+	cancel(reason) {
+		if (this.isInProgress() == false) return;
+		this.tEnd = performance.now();
+		this.cancelled = true;
+		this.reject(reason);
+	}
+	isInProgress() {
+		return !this.finished && !this.cancelled;
+	}
+	timeSpent() {
+		return (this.tEnd ? this.tEnd : performance.now()) - this.tStart;
+	}
+};
+
 
 class TimeBoundTrackers extends PriorityQ {
 	constructor(cleanUpIntervalMS = 1000) {
@@ -23,7 +51,7 @@ class TimeBoundTrackers extends PriorityQ {
 		}, cleanUpIntervalMS);
 	}
 	close() {
-		if (this.cleanUpTimer) {
+		if (this.cleanUpTimer) { console.log("cleaning up timer expiry invertal")
 			clearInterval(this.cleanUpTimer);
 			this.cleanUpTimer = null;
 		}
@@ -68,6 +96,7 @@ class UDPConnection extends EventEmitter  {
 		return this.peer.state() == ENet.PEER_STATE.CONNECTED;
 	}
 	send(data, cb) {
+		console.log("seding data: ", data);
 		process.nextTick(() => this.peer._host._service()); // force event loop once (since we use larger wait poll)
 		return this.peer.send(0 /*channel*/, data, cb);
 	}
@@ -102,7 +131,7 @@ class RPCRequestTracker extends Tracker {
 	}
 	setExpiry(timeoutMS, expiryQ) {
 		expiryQ.add({ expiresAt: this.tStart + timeoutMS, tracker: this });
-		this.p.then(() => expiryQ.removeOne(el => el.tracker._req.id == this._req.id)); // if it is finished before timeout, remove from the queue
+		this.p.then(() => expiryQ.removeOne(el => el.tracker._req.id == this._req.id)); // if it is finished, remove from the timeout-queue
 		this.p.catch(err => {
 			// if it is time-expired, see if we have to retry again (no need to remove from queue explicitly)
 		});
@@ -127,7 +156,7 @@ class UDPClient {
 		return new Promise((resolve, reject) => {
 			ENet.createClient({ peers: maxPeers, channels: maxChannels, down: 0, up: 0 }, (err, client) => {
 				if (err) return reject(err);
-				client.start(500); // poll at 500ms
+				//client.start(500); // poll at 500ms
 				resolve(new UDPClient(client));
 			});
 		});
@@ -163,7 +192,6 @@ class UDPClient {
 	}
 };
 
-const udpClient = UDPClient.create();
 
 const DISCO_BOOTSTRAP = [
 	'bootstrap1.hyperdht.org:49737',
@@ -185,8 +213,8 @@ class ConnectionManager {
 		this.connections[targetKey] = conn;
 	}
 	getConnection(targetKey) {
-		const conn = this.connection[targetKey];
-		if (conn & conn.isActive()) return conn;
+		const conn = this.connections[targetKey];
+		if (conn && conn.isActive()) return conn;
 		return null;
 	}
 	close() {
@@ -249,13 +277,12 @@ class LocatorMetricsNone extends ConnectionManager {
 			if (blacklisted || this.hasPeerBeenRejected(peerInfo)) return null;
 			// peer was not blacklisted, nor rejected earlier for this key;
 			// connect to it and validate the public key
-			return udpClient.connectTo(peerInfo).then(conn => {
-				conn.request("hello", {}, (err, response) => {
-					console.log("err: ", err, ", response:", response);
-					if(err)
-				});
-			}).catch(err => null);
-		});
+			return udpClient.connectTo(peerInfo).then(conn => { 
+				const tracker = conn.request("hello", {});
+				if (!tracker) return null;
+				return tracker.p.then(response => response ? conn : null);
+			});			
+		}).catch(err => null);
 	}
 	recordEntry(targetKey, conn, timeSpent) {
 		this.addConnection(targetKey, conn);
@@ -267,32 +294,6 @@ class LocatorMetricsNone extends ConnectionManager {
 	close() {
 		super.close();
 		// TODO: shutdown any database connections and cleanup the resources
-	}
-};
-
-class Tracker {
-	constructor() {
-		this.p = new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
-		this.finished = this.cancelled = false;
-		this.tStart = performance.now();
-	}
-	finish(result) {
-		if (this.isInProgress() == false) return;
-		this.tEnd = performance.now();
-		this.finished = true;
-		this.resolve(result);
-	}
-	cancel(reason) {
-		if (this.isInProgress() == false) return;
-		this.tEnd = performance.now();
-		this.cancelled = true;
-		this.reject(reason);
-	}
-	isInProgress() {
-		return !this.finished && !this.cancelled;
-	}
-	timeSpent() {
-		return (this.tEnd ? this.tEnd : performance.now()) - this.tStart;
 	}
 };
 
@@ -322,15 +323,15 @@ class LookupTracker extends Tracker {
 
 class HyperDiscoveryLookup {
 	constructor(d, targetKey, timeout, tracker) {
-		this.nRetryAttempt = 0;
-		this.topic = d.lookup(targetKey);
+		this.nRetryAttempt = 0; console.log("HyperDiscoveryLookup.targetKey: ", targetKey);
+		this.topic = d.lookup(MultiBase.decode(targetKey));
 		this.topic.on('peer', peer => tracker.onPeer(peer)); // we do NOT consider timeouts while peers are being listed
 		this.topic.on('update', () => {
 			if (!tracker.isInProgress()) return;
 			// tracker is running, but discovery is complete - this means lookup failed. Try again or cancel
 			const waitPeriod = 5000 * ++this.nRetryAttempt;
 			if (tracker.timeSpent() + waitPeriod >= timeout)
-				tracker.cancel(new Error(`Timeout - lookup did not find any results in ${timeout}ms`));
+				tracker.cancel(new Errors.Timeout(`Lookup did not find any results in ${timeout}ms for ${targetKey}`, { targetKey, timeout }));
 			else
 				this.retryTimer = setTimeout(() => this.topic.update(), waitPeriod);
 		});
@@ -364,13 +365,13 @@ class Locator {
 			new Locator(Discovery({ ephemeral, bootstrap }), locatorMetrics)
 		);
 	}
-	findOwner(pubKey, timeout = 30000) {
-		if (!pubKey || typeof pubKey !== "string")
-			throw new Error("pubKey should be a base64 encoded publicKey string");
+	findOwner(pubKey, timeout = 5000) {
+		if (!pubKey || typeof pubKey !== "string" || !pubKey.length || !MultiBase.isEncoded(pubKey))
+			return Promise.reject(new Errors.BadRequest("pubKey should be a valid MultiBase encoded publicKey string", { pubKey }));
 		
 		// check if an active connection already exists to the owner of the target.
 		// This conn was recorded in the connection manager the last time the search was successful (LookupTracker::onPeer method).
-		const conn = this.metrics.getConnection(targetKey);
+		const conn = this.metrics.getConnection(pubKey);
 		if (conn) return Promise.resolve(conn);
 		
 		// if a search going on for the same key, return that promise.
@@ -386,29 +387,51 @@ class Locator {
 		//		 if the ip resolves, then it will call finish() and stops all the searches for it
 		//	2. also check if any "future" ip was mentioned by peer (before last disconnect), and try that as well.
 
-		return tracker.p.finally(() => { this.activeTrackers[pubKey] = null; });
+		return tracker.p.finally(() => { delete this.activeTrackers[pubKey]; });
 	}
 	close() {
-		this.disco.destroy();
-		this.disco = null;
-		this.metrics.close();
-		this.metrics = null;
+		if (this.activeTrackers) {
+			Object.keys(this.activeTrackers).forEach(key => this.activeTrackers[key].cancel(`Locator.close()`));
+			this.activeTrackers = null;			
+		}
+		if (this.disco) {
+			this.disco.destroy();
+			this.disco = null;
+		}
+		if (this.metrics)
+		{
+			this.metrics.close();
+			this.metrics = null;			
+		}
 	}
 	invoke(didMethod, params, cb) {
 		// 1. get targetKey and methodName from didMethod
-		const targetKey = Buffer.from("1696a0b9268596cc1d9257e6e49715aa0999a7ce1fc86b04e209f966d097c08d", "hex");
-		const methodName = ".disco";
+		const targetKey = MultiBase.encode("base64", Buffer.from("1696a0b9268596cc1d9257e6e49715aa0999a7ce1fc86b04e209f966d097c08d", "hex")).toString();
+		const methodName = ".disco";		
 		// get a connection to the owner of the key
-		return this.findOwner(targetKey, tracker).then(connection => {
+		return this.findOwner(targetKey).then(connection => {
 			// make RPC call on the connection and return the ID
 			
 			// returns the id of RPC call
+		}).catch(err => {
+			console.log("invoke error: ", err);
 		});
 	}
 }
 
-const targetKey = Buffer.from("1696a0b9268596cc1d9257e6e49715aa0999a7ce1fc86b04e209f966d097c08d", "hex");
+//const targetKey = Buffer.from("1696a0b9268596cc1d9257e6e49715aa0999a7ce1fc86b04e209f966d097c08d", "hex");
 
-Locator.create().then(l => {
-	l.findOwner(targetKey, 90000).then(console.log).catch(console.log).finally(() => l.close());
+Locator.create().then(async l => {
+	const udpClient = await UDPClient.create();
+	l.invoke().then(console.log).catch(console.log).finally(() => {
+		gRPCRequestExpiryQ.close();
+		l.close();
+		udpClient.close();
+		//setTimeout(() => setImmediate(() => ActiveHandles()), 0);
+	});
 });
+
+
+process.on('unhandledRejection', (reason, _p) =>
+	console.error(`Unhandled Rejection ${reason.stack}`)
+);

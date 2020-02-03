@@ -58,6 +58,7 @@
     "enet": "^0.2.9",
     "exit-hook": "^2.2.0",
     "fastpriorityqueue": "^0.6.3",
+    "multibase": "^0.6.0",
     "sodium-native": "^2.4.9",
     "why-is-node-running": "^2.1.0"
   }
