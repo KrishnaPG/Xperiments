@@ -177,7 +177,8 @@ class UDPClient {
 					delete this.connectReqs[connString]; 
 					return reject(err);
 				}
-				// successfully connected, keep the promise in this.connectReqs{} and resolve it
+				// successfully connected, keep the promise in this.connectReqs{} and resolve it;
+				// we only cache the promises here, the actual connections are held in ConnectionManager.
 				const conn = new UDPConnection(peer);
 				conn.once("closed", () => delete this.connectReqs[connString]);
 				return resolve(conn);
@@ -227,12 +228,29 @@ class ConnectionManager {
 	}
 	hasPeerBeenRejected({ host, port, local }, targetKey) {
 		const keyRejections = this.rejections[targetKey];
+		if(!keyRejections) return false;
 		const index = keyRejections.findIndex(peer => peer.host == host && peer.port == port);
 		return index < 0 ? false : true;
 	}
 }
 
-class LocatorMetricsNone extends ConnectionManager {
+class LocatorMetrics extends ConnectionManager {
+	constructor(rpcClientHost) {
+		super();
+		this.rpcClientHost = rpcClientHost;
+	}
+	static start(opt) {
+		return UDPClient.create().then(udpClient => new LocatorMetrics(udpClient));
+	}
+	close() {
+		super.close();
+		if (this.rpcClientHost) {
+			this.rpcClientHost.close();
+			this.rpcClientHost = null;
+		}
+		// TODO: shutdown any database connections and cleanup the resources
+	}
+
 	getBootstrapServers(def = [] ) {
 		return Promise.resolve(def);
 	}
@@ -269,31 +287,38 @@ class LocatorMetricsNone extends ConnectionManager {
 	/**
 	 * Verifies if the peer is valid owner of the said targetKey.
 	 */
-	isPeerValid(peerInfo, targetKey) {
+	isPeerValid(peerInfo, targetKey, lookupTracker) {
 		// 1. check if duplicate (pending validation / ongoing validation)
 		// 2. check if previously validated
 		// 3. connect and ask if it is valid
 		return this.isPeerBlacklisted(peerInfo).then(blacklisted => {
-			if (blacklisted || this.hasPeerBeenRejected(peerInfo)) return null;
+			if (blacklisted || this.hasPeerBeenRejected(peerInfo) || !lookupTracker.isInProgress()) return null;
 			// peer was not blacklisted, nor rejected earlier for this key;
 			// connect to it and validate the public key
-			return udpClient.connectTo(peerInfo).then(conn => { 
-				const tracker = conn.request("hello", {});
-				if (!tracker) return null;
-				return tracker.p.then(response => response ? conn : null);
-			});			
+			return this.rpcClientHost.connectTo(peerInfo).then(conn => { 
+				if (!lookupTracker.isInProgress()) return null;
+				const reqTracker = conn.request("proveAuth", { targetKey });
+				if (!reqTracker) return null;
+				// whenever the lookup query that called us got cancelled or fulfilled, stop further processing
+				lookupTracker.p.finally(() => reqTracker.cancel(new Errors.Timeout(`peer validation cancelled due to lookup tracker finalization`, { peerInfo, targetKey })));
+				// we issued a auth request for the remote peer, wait for the response
+				return reqTracker.p.then(response => {
+					if (!response) { conn.close(); return null; }
+					
+					// TODO: if not valid response, add to rejected list, close the connection and return null
+
+					return conn; // alright, seems the peer is valid
+				}).catch(err => { conn.close(); return null; }); // RPC might have timed out, or some other error. Just consider as auth failure
+			});
 		}).catch(err => null);
 	}
 	recordEntry(targetKey, conn, timeSpent) {
+		// TODO: for first connect, for UDPClient, setup client.start(500); // poll at 500ms
 		this.addConnection(targetKey, conn);
 		// TODO:
 		// 1. add referrer to bootstrap nodes
 		// 2. save the { targetKey -> peer } mapping, along with the current timestamp (last accessed)
 		// 3. save the timeSpent performance metric
-	}
-	close() {
-		super.close();
-		// TODO: shutdown any database connections and cleanup the resources
 	}
 };
 
@@ -307,14 +332,15 @@ class LookupTracker extends Tracker {
 	// returns true if peer is found / search cancelled
 	onPeer(peerInfo) {
 		if (this.isInProgress() == false) return Promise.resolve(true);
+		const connString = peerInfo.host + ":" + peerInfo.port;
+		if (this.candidates[connString]) return Promise.resolve(false);  // ignore duplicates (no matter who referred)	
 		return this.metrics.isReferrerBlacklisted(peerInfo.referrer).then(referrerBlacklisted => {
-			const connString = peerInfo.host + ":" + peerInfo.port;
-			if (referrerBlacklisted || this.candidates[connString]) return false; // ignore duplicates
-			this.candidates[connString] = {};
-			return this.metrics.isPeerValid(peerInfo, targetKey).then(connection => {
+			if (referrerBlacklisted) return false;
+			this.candidates[connString] = {}; // add to "seen" list (to ignore duplicates)
+			return this.metrics.isPeerValid(peerInfo, this.targetKey, this).then(connection => {
 				if (!connection) return false;
 				this.finish(connection);
-				this.metrics.recordEntry(targetKey, connection, this.timeSpent());
+				this.metrics.recordEntry(ths.targetKey, connection, this.timeSpent());
 				return true; // found a peer, finally
 			});
 		});
@@ -323,7 +349,7 @@ class LookupTracker extends Tracker {
 
 class HyperDiscoveryLookup {
 	constructor(d, targetKey, timeout, tracker) {
-		this.nRetryAttempt = 0; console.log("HyperDiscoveryLookup.targetKey: ", targetKey);
+		this.nRetryAttempt = 0; console.log("HyperDiscoveryLookup.targetKey: ", targetKey, " buf: ", MultiBase.decode(targetKey));
 		this.topic = d.lookup(MultiBase.decode(targetKey));
 		this.topic.on('peer', peer => tracker.onPeer(peer)); // we do NOT consider timeouts while peers are being listed
 		this.topic.on('update', () => {
@@ -359,13 +385,13 @@ class Locator {
 	static create({
 		ephemeral = true,
 		bootstrap = DISCO_BOOTSTRAP,
-		locatorMetrics = new LocatorMetricsNone() } = {})
+		opts = {} } = {})
 	{
-		return locatorMetrics.getBootstrapServers(bootstrap).then(bootstrap => 
-			new Locator(Discovery({ ephemeral, bootstrap }), locatorMetrics)
-		);
+		return LocatorMetrics.start(opts).then(locatorMetrics => 
+			locatorMetrics.getBootstrapServers(bootstrap).then(bootstrap =>
+				new Locator(Discovery({ ephemeral, bootstrap }), locatorMetrics)));
 	}
-	findOwner(pubKey, timeout = 5000) {
+	findOwner(pubKey, timeout = 30000) {
 		if (!pubKey || typeof pubKey !== "string" || !pubKey.length || !MultiBase.isEncoded(pubKey))
 			return Promise.reject(new Errors.BadRequest("pubKey should be a valid MultiBase encoded publicKey string", { pubKey }));
 		
@@ -409,24 +435,20 @@ class Locator {
 		const targetKey = MultiBase.encode("base64", Buffer.from("1696a0b9268596cc1d9257e6e49715aa0999a7ce1fc86b04e209f966d097c08d", "hex")).toString();
 		const methodName = ".disco";		
 		// get a connection to the owner of the key
-		return this.findOwner(targetKey).then(connection => {
-			// make RPC call on the connection and return the ID
-			
-			// returns the id of RPC call
-		}).catch(err => {
-			console.log("invoke error: ", err);
-		});
+		return this.findOwner(targetKey)
+			.then(conn => conn.request("method", { param1: "dingbat" }))	// make RPC call on the connection and return the ID
+			.then(reqTracker => { console.log("tracker: ", reqTracker); return reqTracker.p; })
+			.then(response => console.log("response: ", response))
+			.catch(err => {
+				console.log("invoke error: ", err);
+			});
 	}
 }
 
-//const targetKey = Buffer.from("1696a0b9268596cc1d9257e6e49715aa0999a7ce1fc86b04e209f966d097c08d", "hex");
-
-Locator.create().then(async l => {
-	const udpClient = await UDPClient.create();
+Locator.create().then(async l => {	
 	l.invoke().then(console.log).catch(console.log).finally(() => {
-		gRPCRequestExpiryQ.close();
-		l.close();
-		udpClient.close();
+		// gRPCRequestExpiryQ.close();
+		// l.close();
 		//setTimeout(() => setImmediate(() => ActiveHandles()), 0);
 	});
 });
