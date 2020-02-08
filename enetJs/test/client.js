@@ -10,6 +10,7 @@ const EventEmitter = require('events');
 const MultiBase = require('multibase');
 const PriorityQ = require('fastpriorityqueue');
 const { performance } = require('perf_hooks');
+const WebSocket = require('ws');
 
 class Tracker {
 	constructor() {
@@ -293,9 +294,18 @@ class LocatorMetrics extends ConnectionManager {
 		// 3. connect and ask if it is valid
 		return this.isPeerBlacklisted(peerInfo).then(blacklisted => {
 			if (blacklisted || this.hasPeerBeenRejected(peerInfo) || !lookupTracker.isInProgress()) return null;
+			console.log(`validating peer ${peerInfo.host}:${peerInfo.port} for key: ${targetKey}`, peerInfo);
 			// peer was not blacklisted, nor rejected earlier for this key;
 			// connect to it and validate the public key
-			return this.rpcClientHost.connectTo(peerInfo).then(conn => { 
+
+			const ws = new WebSocket(`ws://${peerInfo.host}:${peerInfo.port}`, {
+				perMessageDeflate: false
+			});
+			ws.on("open", () => ws.send("something"));
+			ws.on("message", data => console.log("received:", data));
+
+			return;
+			return this.rpcClientHost.connectTo(peerInfo).then(conn => {  console.log("connected to peer")
 				if (!lookupTracker.isInProgress()) return null;
 				const reqTracker = conn.request("proveAuth", { targetKey });
 				if (!reqTracker) return null;
@@ -391,7 +401,7 @@ class Locator {
 			locatorMetrics.getBootstrapServers(bootstrap).then(bootstrap =>
 				new Locator(Discovery({ ephemeral, bootstrap }), locatorMetrics)));
 	}
-	findOwner(pubKey, timeout = 30000) {
+	findOwner(pubKey, timeout = 300000) {
 		if (!pubKey || typeof pubKey !== "string" || !pubKey.length || !MultiBase.isEncoded(pubKey))
 			return Promise.reject(new Errors.BadRequest("pubKey should be a valid MultiBase encoded publicKey string", { pubKey }));
 		
@@ -405,6 +415,19 @@ class Locator {
 		// gets recorded into the connection manager (LookupTracker::onPeer method).
 		const activeTracker = this.activeTrackers[pubKey];
 		if (activeTracker && activeTracker.isInProgress()) return activeTracker.p;
+
+		// this.disco.holepunch({
+		// 	port: 12345,
+		// 	host: '103.240.207.189',
+		// 	local: false,
+		// 	referrer: {
+		// 		port: 45922,
+		// 		host: '88.99.3.86'
+		// 	}
+		// }, (err, response) => {
+		// 		console.log("holepunch err: ", err);
+		// 		console.log("holepunch reponse: ", response);
+		// });
 		
 		const tracker = this.activeTrackers[pubKey] = new LookupTracker(pubKey, this.metrics);
 		const hdLookup = new HyperDiscoveryLookup(this.disco, pubKey, timeout, tracker); // TODO: add other discovery lookups here
@@ -447,8 +470,8 @@ class Locator {
 
 Locator.create().then(async l => {	
 	l.invoke().then(console.log).catch(console.log).finally(() => {
-		// gRPCRequestExpiryQ.close();
-		// l.close();
+		gRPCRequestExpiryQ.close();
+		l.close();
 		//setTimeout(() => setImmediate(() => ActiveHandles()), 0);
 	});
 });

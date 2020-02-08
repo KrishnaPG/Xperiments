@@ -60,6 +60,8 @@
     "fastpriorityqueue": "^0.6.3",
     "multibase": "^0.6.0",
     "sodium-native": "^2.4.9",
-    "why-is-node-running": "^2.1.0"
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v17.1.0",
+    "why-is-node-running": "^2.1.0",
+    "ws": "^7.2.1"
   }
 }
