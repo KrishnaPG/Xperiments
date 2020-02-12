@@ -55,6 +55,7 @@
   "dependencies": {
     "@feathersjs/errors": "^4.5.1",
     "@hyperswarm/discovery": "^1.7.0",
+    "@hyperswarm/network": "^1.1.2",
     "enet": "^0.2.9",
     "exit-hook": "^2.2.0",
     "fastpriorityqueue": "^0.6.3",
