@@ -176,3 +176,33 @@ class UDPLocatorMetrics extends ConnectionMetrics {
 		// 3. save the timeSpent performance metric
 	}
 };
+
+
+class UDPServer {
+	constructor(eNetServer) {
+		this.server = eNetServer;
+		this.server.on("connect", (peer, data) => {
+			console.log("peer connected: ", peer, data);
+			peer.on("message", (packet, channel) => {
+				console.log("Message: ", packet, channel);
+			})
+		})
+	}
+	close() {
+		if (this.server) {
+			this.server.destroy();
+			this.server = null;
+		}
+	}
+	static create(maxPeers = 32, maxChannels = 64) {
+		return new Promise((resolve, reject) => {
+			const address = new ENet.Address("0.0.0.0", 12345);
+			ENet.createServer({ address, peers: maxPeers, channels: maxChannels, down: 0, up: 0 }, (err, server) => {
+				if (err) return reject(err);
+				server.start(500); // poll at 500ms
+				resolve(new UDPServer(server));
+			});
+		});
+	}
+};
+// const udpServer = UDPServer.create();

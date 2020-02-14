@@ -3,42 +3,8 @@
  * All Rights Reserved.
  */
 const atExit = require('exit-hook');
-const Discovery = require('@hyperswarm/discovery');
-const ENet = require('enet');
 const MultiBase = require('multibase');
 const Sodium = require('sodium-native');
-const uWS = require('uWebSockets.js');
-const WebSocket = require('ws');
-
-class UDPServer{
-	constructor(eNetServer) {
-		this.server = eNetServer;
-		this.server.on("connect", (peer, data) => {
-			console.log("peer connected: ", peer, data);
-			peer.on("message", (packet, channel) => {
-				console.log("Message: ", packet, channel);
-			})
-		})
-	}
-	close() {
-		if (this.server) {
-			this.server.destroy();
-			this.server = null;
-		}
-	}
-	static create(maxPeers = 32, maxChannels = 64) {
-		return new Promise((resolve, reject) => {
-			const address = new ENet.Address("0.0.0.0", 12345);
-			ENet.createServer({ address, peers: maxPeers, channels: maxChannels, down: 0, up: 0 }, (err, server) => {
-				if (err) return reject(err);
-				server.start(500); // poll at 500ms
-				resolve(new UDPServer(server));
-			});
-		});
-	}	
-};
-// const udpServer = UDPServer.create();
-
 
 /* 
 // generate new key-pair
@@ -65,9 +31,9 @@ const nw = network({
 	socket(socket, isTCP) { 
 		console.log("network incoming socket: ", socket.remoteAddress, socket.remotePort, socket.remoteFamily, " is TCP: ", isTCP);
 		socket.write(`Hello Client from server [${new Date()}]`);
-		socket.on("data", msg => {			
+		socket.on("data", msg => {
 			// console.log(msg.toString());
-			socket.write(`echo[${new Date()}]: ${msg}`);
+			socket.write(`echo[${new Date()}]: ${msg.toString()}`);
 		});
 		socket.on("close", () => socket.destroy());
 		socket.on("error", err => { /* "close" event will follow this automatically. But still need this handler to avoid app crash */ });

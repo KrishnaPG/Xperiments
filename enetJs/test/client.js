@@ -36,21 +36,22 @@ class Tracker {
 	}
 };
 
+function clearExpired(tbtQ) {
+	let el = tbtQ.peek();
+	while (el && el.expiresAt <= performance.now()) {
+		tbtQ.poll(); // remove the top element;
+		el.tracker.cancel(new Errors.Timeout(`Timeout`));
+		el = tbtQ.peek();
+	}
+}
+
 class TimeBoundTrackers extends PriorityQ {
-	constructor(cleanUpIntervalMS = 1000) {
+	constructor(cleanUpIntervalMS = 1000, cleanupFn = clearExpired) {
 		super((a, b) => a.expiresAt < b.expiresAt);
-		this.cleanUpTimer = setInterval(() => {
-			let el = this.peek();
-			while (el && el.expiresAt <= performance.now()) {
-				this.poll(); // remove the top element; (so that in the cancel's callback below, caller cannot remove it again)
-				el.tracker.cancel(new Errors.Timeout(`Timeout`));
-				el = this.peek();
-			}
-		}, cleanUpIntervalMS);
+		this.cleanUpTimer = setInterval(cleanupFn, cleanUpIntervalMS, this);
 	}
 	close() {
 		if (this.cleanUpTimer) {
-			console.log("cleaning up timer expiry invertal")
 			clearInterval(this.cleanUpTimer);
 			this.cleanUpTimer = null;
 		}
@@ -64,18 +65,22 @@ class RPCRequestTracker extends Tracker {
 	constructor(req) {
 		super();
 		this._req = req;
-		this._req.id = (Math.random() * this.tStart).toString();
+		this._req.id = req.id || (Math.random() * this.tStart).toString();
 	}
 	setExpiry(timeoutMS, expiryQ) {
+		const equalityFn = el => el.tracker._req.id == this._req.id;
+		expiryQ.removeOne(equalityFn);
 		expiryQ.add({ expiresAt: this.tStart + timeoutMS, tracker: this });
-		this.p.then(() => expiryQ.removeOne(el => el.tracker._req.id == this._req.id)); // if it is finished, remove from the timeout-queue
-		this.p.catch(err => {
-			// if it is time-expired, see if we have to retry again (no need to remove from queue explicitly)
-		});
+		this.p.finally(() => expiryQ.removeOne(equalityFn)); // finished or cancelled, remove from the timeout-queue (if exists)
 	}
 	get req() { return this._req }
 	finish() {
 		throw new Errors.MethodNotAllowed(`RPCRequestTracker.Finish() can not be called directly !!`);
+	}
+	abort(reason) { // TODO: we only abort successful requests that server returned an abort handle for async results
+		if (!this.isInProgress()) return;
+		this.conn.send(`{ "jsonrpc": "2.0", "method": ".abort", "params": { "id": "<abort handle received from server>" } }`, err => { /* send error */ });
+		super.cancel(reason);
 	}
 };
 
@@ -90,31 +95,33 @@ class ConnectionManager extends EventEmitter {
 	constructor() {
 		super();
 		// current active connections for each targetKey. Maps { targetKey -> one connection }
-		this.connections = {}; // peers validated successfully
+		this.connections = new Map(); // peers validated successfully
 		// current rejections for each targetKey. Maps { targetKey -> [] of rejected {host, port} objects }
-		this.rejections = {}; // peers connected but validation failed (could go into blacklist)
-		// TODO: somehow cleanup closed connections !! Should we handle the "closed" event?
+		this.rejections = new Map(); // peers connected but validation failed (could go into blacklist)
 	}
 	addConnection(targetKey, conn) {
-		const oldConn = this.connections[targetKey];
+		const oldConn = this.connections.get(targetKey);
 		if (oldConn) oldConn.close();
-		this.connections[targetKey] = conn;
+		this.connections.set(targetKey, conn);
+		conn.once("closed", () => this.connections.delete(targetKey));
 	}
 	getConnection(targetKey) {
-		const conn = this.connections[targetKey];
+		const conn = this.connections.get(targetKey);
 		if (conn && conn.isActive()) return conn;
 		return null;
 	}
 	close() {
-		Object.keys(this.connections).forEach(key => this.connections[key].close());
-		this.connections = {};
+		for (let conn of this.connections.values())
+			conn.close();
+		this.connections.clear();
+		this.rejections.clear();
 	}
 	addRejection(peerInfo, targetKey) {
-		if (!this.rejections[targetKey]) this.rejections[targetKey] = [];
-		this.rejections[targetKey].push(peerInfo);
+		if (!this.rejections.has(targetKey)) this.rejections.set(targetKey, []);
+		this.rejections.get(targetKey).push(peerInfo);
 	}
 	hasPeerBeenRejected({ host, port, local }, targetKey) {
-		const keyRejections = this.rejections[targetKey];
+		const keyRejections = this.rejections.get(targetKey);
 		if (!keyRejections) return false;
 		const index = keyRejections.findIndex(peer => peer.host == host && peer.port == port);
 		return index < 0 ? false : true;
@@ -188,27 +195,28 @@ class ConnectionMetrics extends ConnectionManager {
  */
 class ConnectionReqManager {
 	constructor() {
-		this.connectReqs = {}; // successful or in-progress requests till now; Maps {<hostname:port> -> Promise<connection>}
+		this.connectReqs = new Map(); // successful or in-progress requests till now; Maps {<hostname:port> -> Promise<connection>}
 	}
 	connectTo(peerInfo, connectCB) {
 		const connString = `${peerInfo.host}:${peerInfo.port}`;
 		// if a previously resolved, or in-progress request is available, return it;
 		// This way, we do not create multiple connections to the same <host:port>;
-		const req = this.connectReqs[connString]; if (req) console.log("--reusing conn: ", connString);
+		const req = this.connectReqs.get(connString); if (req) console.log("--reusing conn: ", connString);
 		if (req) return req;
 		// Either no previous attempt was made, or previous attempt failed (hence promise removed from the q);
 		// make a fresh request (again)
 		const connPromise = connectCB(peerInfo); console.log("--ConnectionReqManager req start: ", connString);
 		connPromise.catch(err => {
 			// remove it so that next time fresh connection attempt can be made again
-			delete this.connectReqs[connString];
+			this.connectReqs.delete(connString);
 		});
 		connPromise.then(conn => {
 			// successfully connected, keep the promise in this.connectReqs{} and resolve it;
 			// we only cache the promises here, the actual connections are held in ConnectionManager.
-			conn.once("closed", () => delete this.connectReqs[connString]);
+			conn.once("closed", () => this.connectReqs.delete(connString));
 		});
-		return this.connectReqs[connString] = connPromise;
+		this.connectReqs.set(connString, connPromise);
+		return connPromise;
 	}
 	close() {
 		// nothing to do. in-progress requests are either deleted on failure, or 
@@ -222,12 +230,14 @@ class HSNWConnection extends EventEmitter {
 		this.s = socket;
 		socket.on("error", err => { /* "close" event will follow this automatically. Still need this handler to avoid app crash */ });
 		socket.once("close", () => this.close()); // whenever disconnected, close the connection
-		socket.on("data", data => console.log("received: ", data.toString()));
+		socket.on("data", data => this.onDataRead(data));
+		this.requestQ = new Map(); // active Requests waiting for response (or 'in-progress' streams?)
 	}
 	close() {
-		if (this.closed) return; console.log(" -------closing connection")
+		if (this.closed) return;
 		this.closed = true;
-		this.s.destroy();
+		this.requestQ.clear(); // we are not cancelling the Requests, we are just removing the trackers (server may comeback with response, but we will not be around)
+		this.s.destroy(); // close the socket
 		this.emit("closed");
 	}
 	isActive() {
@@ -245,14 +255,28 @@ class HSNWConnection extends EventEmitter {
 	request(method, params, timeoutMS = 5000) {
 		return new Promise((resolve, reject) => {
 			const tracker = new RPCRequestTracker({ jsonrpc: "2.0", method, params });
-			this.send(tracker.req, err => {
+			this.send(tracker.req.toString(), err => {
 				if (err) return reject(err); // send failed
 				// send queued, now caller can wait on tracker.p<> promise to resolve for result;
 				// Also tracker.p<> rejects with TIMEOUT error if timeout is specified (0 disables the timeout)
 				if (timeoutMS) tracker.setExpiry(timeoutMS, gRPCRequestExpiryQ);
+				this.requestQ.set(tracker.req.id, tracker); // add to the Q so that onDataRead we can do id -> tracker mapping
+				tracker.p.finally(() => this.requestQ.delete(tracker.req.id)); // finished or cancelled, remove from the queue
 				resolve(tracker);
 			});
 		});
+	}
+	cancelPendingRequests(reason = "Request Cancelled") {
+		for (let reqTracker of this.requestQ.values())
+			reqTracker.cancel(reason);
+		this.requestQ.clear();
+	}
+	onDataRead(data) {
+		try {
+			const msg = JSON.parse(data.toString());
+			if (msg.jsonrpc !== "2.0" || !msg.id) return; // nothing we can do !!
+
+		} catch (ex) { console.error("Received error from socket: ", ex) };
 	}
 }
 
@@ -293,7 +317,7 @@ class HSNetworkConnMetrics extends ConnectionMetrics {
 		// 3. connect and ask if it is valid
 		return super.isPeerValid(peerInfo, targetKey, lookupTracker).then(blacklisted => {
 			if (blacklisted || this.hasPeerBeenRejected(peerInfo) || !lookupTracker.isInProgress()) return null;
-			console.log(`validating peer ${peerInfo.host}:${peerInfo.port} for key: ${targetKey}`, peerInfo);
+			console.log(`validating peer ${peerInfo.host}:${peerInfo.port} for key: ${targetKey}`);
 			// peer was not blacklisted, nor rejected earlier for this key;
 			// connect to it and validate the public key
 			const connPromise = this.connectReqs.connectTo(peerInfo, _peerInfo =>
@@ -311,7 +335,9 @@ class HSNetworkConnMetrics extends ConnectionMetrics {
 					if (!response) { conn.close(); return null; }
 					// TODO: if not valid response, add to rejected list, close the connection and return null
 					return conn; // alright, seems the peer is valid
-				}).catch(err => { conn.close(); return null; }); // RPC might have timed out, or some other error. Just consider as auth failure
+				}).catch(err => {
+					conn.close(); return null;
+				}); // RPC might have timed out, or some other error. Just consider as auth failure
 			}).catch(err => null /* connection establishment failed */);
 		}).catch(err => null /* super class decided it as invalid peer */);
 	}
@@ -322,18 +348,19 @@ class LookupTracker extends Tracker {
 		super();
 		this.targetKey = targetKey;
 		this.metrics = metrics;
-		this.connInProgress = {}; // keep track of in-progress validations to avoid duplicates
+		this.connInProgress = new Map(); // keep track of in-progress validations to avoid duplicates
 	}
 	// returns true if peer is found / search cancelled
 	onPeer(peerInfo) {
-		if (this.isInProgress() == false) return Promise.resolve(true);
-		const connString = peerInfo.host + ":" + peerInfo.port; if (this.connInProgress[connString]) console.log("LookupTracker: onPeer duplicate ", connString);
-		if (this.connInProgress[connString]) return Promise.resolve(false);  // ignore duplicates (no matter who referred)	
+		if (this.isInProgress() == false) return Promise.resolve(true); console.log("on peer: ", this.connInProgress);
+		const connString = peerInfo.host + ":" + peerInfo.port; if (this.connInProgress.has(connString)) console.log("LookupTracker: onPeer duplicate ", connString);
+		if (this.connInProgress.has(connString)) return Promise.resolve(false);  // ignore duplicates (no matter who referred)	
 		return this.metrics.isReferrerBlacklisted(peerInfo.referrer).then(referrerBlacklisted => {
 			if (referrerBlacklisted) return false; console.log("LookupTracker: onPeer, going to verify ", connString);
-			this.connInProgress[connString] = true; // add to "in progress" list (to ignore duplicates)
+			this.connInProgress.set(connString, true); // add to "in progress" list (to ignore duplicates)
 			return this.metrics.isPeerValid(peerInfo, this.targetKey, this).then(connection => {
-				delete this.connInProgress[connString]; // allow retry in the next update (in case of success, connection is already cached, so no harm)
+				console.log("on peerValid.then ", this.connInProgress);
+				this.connInProgress.delete(connString); // allow retry in the next update (in case of success, connection is already cached, so no harm)
 				if (!connection) return false;
 				this.finish(connection); console.log("LookupTracker: onPeer, found ", connString);
 				this.metrics.recordEntry(ths.targetKey, connection, this.timeSpent());
@@ -375,7 +402,7 @@ class HSNetworkLookup {
 class Locator {
 	constructor(m) {
 		this.metrics = m;
-		this.activeTrackers = {};
+		this.activeTrackers = new Map();
 	}
 	static create({
 		ephemeral = true,
@@ -396,23 +423,23 @@ class Locator {
 		// if a search going on for the same key, return that promise.
 		// On success the promise resolves to an active connection to the owner, also
 		// gets recorded into the connection manager (LookupTracker::onPeer method).
-		const activeTracker = this.activeTrackers[pubKey];
+		const activeTracker = this.activeTrackers.get(pubKey);
 		if (activeTracker && activeTracker.isInProgress()) return activeTracker.p;
 
-		const tracker = this.activeTrackers[pubKey] = new LookupTracker(pubKey, this.metrics);
+		const tracker = new LookupTracker(pubKey, this.metrics);
+		this.activeTrackers.set(pubKey, tracker);
 		const hdLookup = new HSNetworkLookup(pubKey, timeout, tracker); // TODO: add other discovery lookups here
 		// TODO: in parallel lookup the metrics database to connect last known IP for the owner (use the same tracker)
 		//	1. read the last known ips from the DB, and use tracker.onPeer(<ip>) on each of them
 		//		 if the ip resolves, then it will call finish() and stops all the searches for it
 		//	2. also check if any "future" ip was mentioned by peer (before last disconnect), and try that as well.
 
-		return tracker.p.finally(() => { delete this.activeTrackers[pubKey]; });
+		return tracker.p.finally(() => { this.activeTrackers.delete(pubKey); });
 	}
 	close() {
-		if (this.activeTrackers) {
-			Object.keys(this.activeTrackers).forEach(key => this.activeTrackers[key].cancel(`Locator.close()`));
-			this.activeTrackers = null;
-		}
+		for (let tracker of this.activeTrackers.values())
+			tracker.cancel(`Locator.close()`);
+		this.activeTrackers.clear();
 		if (this.metrics)
 		{
 			this.metrics.close();
