@@ -74,9 +74,9 @@ class RPCRequestTracker extends Tracker {
 		this.p.finally(() => expiryQ.removeOne(equalityFn)); // finished or cancelled, remove from the timeout-queue (if exists)
 	}
 	get req() { return this._req }
-	finish() {
-		throw new Errors.MethodNotAllowed(`RPCRequestTracker.Finish() can not be called directly !!`);
-	}
+	// finish() {
+	// 	throw new Errors.MethodNotAllowed(`RPCRequestTracker.Finish() can not be called directly !!`);
+	// }
 	abort(reason) { // TODO: we only abort successful requests that server returned an abort handle for async results
 		if (!this.isInProgress()) return;
 		this.conn.send(`{ "jsonrpc": "2.0", "method": ".abort", "params": { "id": "<abort handle received from server>" } }`, err => { /* send error */ });
@@ -91,6 +91,8 @@ const DISCO_BOOTSTRAP = [
 	'bootstrap3.hyperdht.org:49737'
 ];
 
+
+
 class ConnectionManager extends EventEmitter {
 	constructor() {
 		super();
@@ -98,6 +100,15 @@ class ConnectionManager extends EventEmitter {
 		this.connections = new Map(); // peers validated successfully
 		// current rejections for each targetKey. Maps { targetKey -> [] of rejected {host, port} objects }
 		this.rejections = new Map(); // peers connected but validation failed (could go into blacklist)
+		// For connections that opted for keepAlive, try pinging them before they expire
+		const connTimeout = 60 * 1000; // assumption based on TCP connection timeout etc.
+		const keepAliveInterval = (connTimeout / 2.0) - 10; // to give maximum idle time possible without sending frequent pings
+		this.keepAliveTimer = setInterval(() => {
+			const nextAttempt = (Math.floor(performance.now()/1000) * 1000) + keepAliveInterval;
+			for (let conn of this.connections.values())
+				if (conn.keepAlive && conn.idleDuration(nextAttempt) >= connTimeout)
+					conn.ping();
+		}, keepAliveInterval);
 	}
 	addConnection(targetKey, conn) {
 		const oldConn = this.connections.get(targetKey);
@@ -111,6 +122,8 @@ class ConnectionManager extends EventEmitter {
 		return null;
 	}
 	close() {
+		clearInterval(this.keepAliveTimer);
+		this.keepAliveTimer = null;
 		for (let conn of this.connections.values())
 			conn.close();
 		this.connections.clear();
@@ -131,7 +144,6 @@ class ConnectionManager extends EventEmitter {
 class ConnectionMetrics extends ConnectionManager {
 	constructor() {
 		super();
-		this.connMgr = new ConnectionManager();
 		setImmediate(() => this.emit("metricsBase.ready", this));	// TODO: raise this even on database ready
 	}
 	close() {
@@ -232,11 +244,13 @@ class HSNWConnection extends EventEmitter {
 		socket.once("close", () => this.close()); // whenever disconnected, close the connection
 		socket.on("data", data => this.onDataRead(data));
 		this.requestQ = new Map(); // active Requests waiting for response (or 'in-progress' streams?)
+		this.keepAlive = true; // if true, connectionManager will send pings when conn has no activity for 59 seconds
+		this.tLastActivity = performance.now(); // last time we received anything from server
 	}
 	close() {
 		if (this.closed) return;
 		this.closed = true;
-		this.requestQ.clear(); // we are not cancelling the Requests, we are just removing the trackers (server may comeback with response, but we will not be around)
+		this.cancelPendingRequests();
 		this.s.destroy(); // close the socket
 		this.emit("closed");
 	}
@@ -248,14 +262,19 @@ class HSNWConnection extends EventEmitter {
 		return this.s.write(data, encoding, cb);
 	}
 	/**
-	 * @returns a tracker that allows cancel() of the request. It holds a promise
-	 * that resolves when the request has a response, and rejects when an error happens 
-	 * or timeout is reached.
+	 * @returns a promise that
+	 * 	- on send failure rejects with an error, and
+	 * 	- on send success resolves to a tracker that allows tracking the request status as below.
+	 * The resolved tracker holds a promise `p` that
+	 * 	- resolves when the request has a response, and 
+	 * 	- rejects when an server returns an error or timeout is reached.
+	 * In other words, if send fails, callers gets an error. Only on send success that 
+	 * the caller is given a tracker that can be used to await the response.
 	 */
 	request(method, params, timeoutMS = 5000) {
 		return new Promise((resolve, reject) => {
 			const tracker = new RPCRequestTracker({ jsonrpc: "2.0", method, params });
-			this.send(tracker.req.toString(), err => {
+			this.send(JSON.stringify(tracker.req), err => {
 				if (err) return reject(err); // send failed
 				// send queued, now caller can wait on tracker.p<> promise to resolve for result;
 				// Also tracker.p<> rejects with TIMEOUT error if timeout is specified (0 disables the timeout)
@@ -272,11 +291,23 @@ class HSNWConnection extends EventEmitter {
 		this.requestQ.clear();
 	}
 	onDataRead(data) {
+		this.tLastActivity = performance.now(); console.log("received: ", data.toString());
 		try {
 			const msg = JSON.parse(data.toString());
 			if (msg.jsonrpc !== "2.0" || !msg.id) return; // nothing we can do !!
+			const reqTracker = this.requestQ.get(msg.id);
+			if (!reqTracker) return; // no one is interested in this response !!
+			
+			reqTracker.finish(msg);
 
-		} catch (ex) { console.error("Received error from socket: ", ex) };
+		} catch (ex) { console.error("Received invalid json data from socket: ", ex) };
+	}
+	idleDuration(now = performance.now()) {
+		return now - this.tLastActivity;
+	}
+	ping() {
+		console.log("sending ping ", performance.now());
+		this.send(`{"jsonrpc": "2.0", "method": ".ping"}`, err => {/* send error. Let socket error event close the connection */ });
 	}
 }
 
@@ -311,35 +342,32 @@ class HSNetworkConnMetrics extends ConnectionMetrics {
 	/**
 	 * Verifies if the peer is valid owner of the said targetKey.
 	 */
-	isPeerValid(peerInfo, targetKey, lookupTracker) {
+	async isPeerValid(peerInfo, targetKey, lookupTracker) {
 		// 1. check if duplicate (pending validation / ongoing validation)
 		// 2. check if previously validated
 		// 3. connect and ask if it is valid
-		return super.isPeerValid(peerInfo, targetKey, lookupTracker).then(blacklisted => {
-			if (blacklisted || this.hasPeerBeenRejected(peerInfo) || !lookupTracker.isInProgress()) return null;
-			console.log(`validating peer ${peerInfo.host}:${peerInfo.port} for key: ${targetKey}`);
-			// peer was not blacklisted, nor rejected earlier for this key;
-			// connect to it and validate the public key
-			const connPromise = this.connectReqs.connectTo(peerInfo, _peerInfo =>
-				new Promise((resolve, reject) => this.nw.connect(_peerInfo, (err, socket, isTCP) => err ? reject(err) : resolve(new HSNWConnection(socket, isTCP))))
-			);
-			return connPromise.then(conn => {
-				console.log("connected to peer: ", `${peerInfo.host}:${peerInfo.port}`);
-				if (!lookupTracker.isInProgress()) return null;
-				const reqTracker = conn.request("proveAuth", { targetKey });
-				if (!reqTracker) return null;
-				// whenever the lookup query that called us got cancelled or fulfilled, stop further processing
-				lookupTracker.p.finally(() => reqTracker.cancel(new Errors.Timeout(`peer validation cancelled due to lookup tracker finalization`, { peerInfo, targetKey })));
-				// we issued a auth request for the remote peer, wait for the response
-				return reqTracker.p.then(response => {
-					if (!response) { conn.close(); return null; }
-					// TODO: if not valid response, add to rejected list, close the connection and return null
-					return conn; // alright, seems the peer is valid
-				}).catch(err => {
-					conn.close(); return null;
-				}); // RPC might have timed out, or some other error. Just consider as auth failure
-			}).catch(err => null /* connection establishment failed */);
-		}).catch(err => null /* super class decided it as invalid peer */);
+		const blacklisted = await super.isPeerValid(peerInfo, targetKey, lookupTracker);
+		if (blacklisted || this.hasPeerBeenRejected(peerInfo) || !lookupTracker.isInProgress()) return null;
+		console.log(`validating peer ${peerInfo.host}:${peerInfo.port} for key: ${targetKey}`);
+		// peer was not blacklisted, nor rejected earlier for this key;
+		// connect to it and validate the public key
+		const connPromise = this.connectReqs.connectTo(peerInfo, _peerInfo =>
+			new Promise((resolve, reject) => this.nw.connect(_peerInfo, (err, socket, isTCP) => err ? reject(err) : resolve(new HSNWConnection(socket, isTCP))))
+		);
+		let conn = null;
+		try {
+			conn = await connPromise;
+			const reqTracker = await conn.request("proveAuth", { targetKey });
+			// whenever the lookup query that called us got cancelled or fulfilled, stop further processing
+			lookupTracker.p.finally(() => reqTracker.cancel(new Errors.Timeout(`peer validation cancelled due to lookup tracker finalization`, { peerInfo, targetKey })));
+			const response = await reqTracker.p; // RPC might have timed out, or some other error. Just consider as auth failure
+			if (!response) { conn.closed(); return null; }
+			// TODO: if not valid response, add to rejected list, close the connection and return null
+			return conn;
+		} catch (err) {
+			if (conn) conn.close();
+		};
+		return null;
 	}
 };
 
@@ -351,22 +379,21 @@ class LookupTracker extends Tracker {
 		this.connInProgress = new Map(); // keep track of in-progress validations to avoid duplicates
 	}
 	// returns true if peer is found / search cancelled
-	onPeer(peerInfo) {
-		if (this.isInProgress() == false) return Promise.resolve(true); console.log("on peer: ", this.connInProgress);
+	async onPeer(peerInfo) {
+		if (this.isInProgress() == false) return true; console.log("on peer: ", this.connInProgress);
 		const connString = peerInfo.host + ":" + peerInfo.port; if (this.connInProgress.has(connString)) console.log("LookupTracker: onPeer duplicate ", connString);
-		if (this.connInProgress.has(connString)) return Promise.resolve(false);  // ignore duplicates (no matter who referred)	
-		return this.metrics.isReferrerBlacklisted(peerInfo.referrer).then(referrerBlacklisted => {
-			if (referrerBlacklisted) return false; console.log("LookupTracker: onPeer, going to verify ", connString);
-			this.connInProgress.set(connString, true); // add to "in progress" list (to ignore duplicates)
-			return this.metrics.isPeerValid(peerInfo, this.targetKey, this).then(connection => {
-				console.log("on peerValid.then ", this.connInProgress);
-				this.connInProgress.delete(connString); // allow retry in the next update (in case of success, connection is already cached, so no harm)
-				if (!connection) return false;
-				this.finish(connection); console.log("LookupTracker: onPeer, found ", connString);
-				this.metrics.recordEntry(ths.targetKey, connection, this.timeSpent());
-				return true; // found a peer, finally
-			});
-		}).catch(err => {/* referrer blacklisted, do nothing */ });
+		if (this.connInProgress.has(connString)) return false;  // ignore duplicates (no matter who referred)	
+
+		const referrerBlacklisted = await this.metrics.isReferrerBlacklisted(peerInfo.referrer);
+		if (referrerBlacklisted) return false; console.log("LookupTracker: onPeer, going to verify ", connString);
+
+		this.connInProgress.set(connString, true); // add to "in progress" list (to ignore duplicates)
+		const connection = await this.metrics.isPeerValid(peerInfo, this.targetKey, this).catch(err => null).finally(() => this.connInProgress.delete(connString));
+		if (!connection) return false;
+
+		this.finish(connection);
+		this.metrics.recordEntry(this.targetKey, connection, this.timeSpent());
+		return true; // found a peer, finally
 	}
 }
 
@@ -461,15 +488,17 @@ class Locator {
 	}
 }
 
-Locator.create().then(l => {
-	l.invoke().then(console.log).catch(console.log).finally(() => {
-		console.log("finally");
-		gRPCRequestExpiryQ.close();
-		l.close();
-		//setTimeout(() => setImmediate(() => ActiveHandles()), 0);
+async function func() {
+	const l = await Locator.create().then(async l => {
+		await l.invoke().then(console.log).catch(console.log);	
+		return l;
 	});
-});
-
+	console.log("finally");
+	gRPCRequestExpiryQ.close();
+	l.close();
+	//setTimeout(() => setImmediate(() => ActiveHandles()), 0);
+};
+func();
 
 process.on('unhandledRejection', (reason, _p) =>
 	console.error(`[Unhandled Rejection] ${reason.stack ? reason.stack : reason.message }`)

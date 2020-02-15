@@ -30,10 +30,10 @@ const network = require('@hyperswarm/network');
 const nw = network({
 	socket(socket, isTCP) { 
 		console.log("network incoming socket: ", socket.remoteAddress, socket.remotePort, socket.remoteFamily, " is TCP: ", isTCP);
-		socket.write(`Hello Client from server [${new Date()}]`);
+		//socket.write(`Hello Client from server [${new Date()}]`);
 		socket.on("data", msg => {
-			// console.log(msg.toString());
-			socket.write(`echo[${new Date()}]: ${msg.toString()}`);
+			console.log(msg.toString());
+			socket.write(msg.toString());
 		});
 		socket.on("close", () => socket.destroy());
 		socket.on("error", err => { /* "close" event will follow this automatically. But still need this handler to avoid app crash */ });
@@ -71,6 +71,8 @@ wss.on('connection', function connection(ws) {
 });*/
 
 atExit(() => {
+	nw.close();
+	return;
 	topic.destroy(); // un-announce the key	
 	d.destroy(); // free the resources (also destroys all topics)
 });
