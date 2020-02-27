@@ -1,0 +1,17 @@
+invoke error:  BadRequest: pubKey should be a valid MultiBase encoded publicKey string
+    at new BadRequest (E:\WinApp\xperiments\enetJs\node_modules\@feathersjs\errors\lib\index.js:86:17)
+    at Locator.findOwner (E:\WinApp\xperiments\enetJs\test\client.js:370:26)
+    at Locator.invoke (E:\WinApp\xperiments\enetJs\test\client.js:410:15)
+    at E:\WinApp\xperiments\enetJs\test\client.js:424:4
+    at processTicksAndRejections (internal/process/task_queues.js:85:5) {
+  type: 'FeathersError',
+  name: 'BadRequest',
+  message: 'pubKey should be a valid MultiBase encoded publicKey string',
+  code: 400,
+  className: 'bad-request',
+  data: { pubKey: 'dingbat' },
+  errors: {}
+}
+undefined
+closing all
+cleaning up timer expiry invertal
