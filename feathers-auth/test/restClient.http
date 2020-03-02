@@ -1,0 +1,21 @@
+### Create new user
+POST http://127.0.0.1:3030/users
+content-type: application/json
+
+{
+  "email": "hello@feathersjs.com",
+  "password": "supersecret"
+}
+
+### Get a token
+POST http://127.0.0.1:3030/auth
+content-type: application/json
+
+{
+  "strategy": "local",
+  "email": "admin@local",
+  "password": "default"
+}
+
+
+GET http://127.0.0.1:3030/users/iO52nmGoRTgcnX5l
