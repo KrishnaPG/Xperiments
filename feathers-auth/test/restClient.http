@@ -18,4 +18,11 @@ content-type: application/json
 }
 
 
-GET http://127.0.0.1:3030/users/iO52nmGoRTgcnX5l
+### oAuth callback
+GET http://localhost:3030/oauth/github/callback
+
+### github oAuth
+GET http://localhost:3030/oauth/github
+
+### google oAuth
+GET http://localhost:3030/oauth/google

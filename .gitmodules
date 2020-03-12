@@ -1,0 +1,6 @@
+[submodule "nbind/simstring"]
+	path = nbind/simstring
+	url = https://github.com/chokkan/simstring.git
+[submodule "node-addon/simstring"]
+	path = node-addon/simstring
+	url = https://github.com/chokkan/simstring.git

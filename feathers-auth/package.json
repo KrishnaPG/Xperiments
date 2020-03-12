@@ -26,8 +26,8 @@
   "scripts": {
     "test": "npm run lint && npm run jest",
     "lint": "eslint src/. test/. --config .eslintrc.json",
-    "dev": "nodemon src/",
-    "debug": "nodemon --inspect-brk=9255 src/",
+    "dev": "nodemon --inspect=0.0.0.0:9255 src/",
+    "debug": "set NODE_ENV=development& set DEBUG=* & nodemon --inspect-brk=9255 src/",
     "start": "node src/",
     "jest": "jest  --forceExit"
   },
@@ -61,5 +61,47 @@
     "eslint": "^6.8.0",
     "jest": "^25.1.0",
     "nodemon": "^2.0.2"
-  }
+  },
+  "eslintConfig": {
+    "env": {
+      "browser": true,
+      "es2020": true,
+      "node": true,
+      "jest": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2018
+    },
+    "extends": "eslint:recommended",
+    "ignorePatterns": [
+      "node_modules/"
+    ],
+    "rules": {
+      "indent": [
+        "error",
+        "tab"
+      ],
+      "linebreak-style": [
+        "error",
+        "windows"
+      ],
+      "no-unused-vars": [
+        "error",
+        {
+          "argsIgnorePattern": "^_"
+        }
+      ],
+      "semi": [
+        "error",
+        "always"
+      ]
+    }
+  },
+  "jsdoc": {
+    "source": {
+      "exclude": [
+        "node_modules"
+      ]
+    }
+  }  
 }

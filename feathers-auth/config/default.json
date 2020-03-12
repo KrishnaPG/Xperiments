@@ -34,12 +34,12 @@
     "oauth": {
       "redirect": "/",
       "google": {
-        "key": "<google oauth key>",
-        "secret": "<google oauth secret>",
+        "key": "995447676356-tiq01oupbd0sdvlfp1q81t5u8b7pb6vj.apps.googleusercontent.com",
+        "secret": "TEDbK7_2fBcj1UeCG5dZBG38",
         "scope": [
+          "openid",
           "email",
-          "profile",
-          "openid"
+          "profile"
         ]
       },
       "twitter": {
@@ -47,8 +47,12 @@
         "secret": "<twitter oauth secret>"
       },
       "github": {
-        "key": "<github oauth key>",
-        "secret": "<github oauth secret>"
+        "key": "393300492adcfbb06ac2",
+        "secret": "c8109df588e865ddb8a737b9d0c0e399dcc12504",
+        "scope": [
+          "user"
+        ],
+        "profile_url": "https://api.github.com/user/emails"
       }
     }
   },

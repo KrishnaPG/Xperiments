@@ -46,6 +46,12 @@
 			"request": "attach",
 			"name": "Attach to Xp: WebAuthn",
 			"port": 9254
-		}		
+		},
+		{
+			"type": "node",
+			"request": "attach",
+			"name": "Attach to Xp: Feathers-Auth",
+			"port": 9255
+		}
 	]
 }
