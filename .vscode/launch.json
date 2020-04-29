@@ -52,6 +52,12 @@
 			"request": "attach",
 			"name": "Attach to Xp: Feathers-Auth",
 			"port": 9255
-		}
+		},
+		{
+			"type": "node",
+			"request": "attach",
+			"name": "Attach to Xp: Fastify",
+			"port": 9256
+		}		
 	]
 }

@@ -1,0 +1,6 @@
+- type can be specified directly as a string, or an object, or a function that returns an object
+- type can be an array
+	- array with single element -> array of that type
+	- array with multiple strings -> enum 
+- foreign key is of format "table.col"
+	- if col is not specified, idCol is assumed

@@ -1,0 +1,25 @@
+{
+  "name": "fastify-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=dev node --inspect=9256 ./index.js",
+    "debug": "cross-env NODE_ENV=dev DEBUG=* node --inspect-brk=9256 ./index.js",
+    "serve": "NODE_ENV=production node ./index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fastify": "^2.13.1",
+    "knex": "^0.21.1",
+    "object-path": "^0.11.4",
+    "sqlite3": "^4.2.0"
+  },
+  "devDependencies": {
+    "cross-env": "^6.0.3",
+    "exit-hook": "2.2.0",
+    "nodemon": "^1.18.11",
+    "pino-pretty": "^4.0.0"
+  }
+}
