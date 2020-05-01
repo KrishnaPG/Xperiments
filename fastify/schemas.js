@@ -37,25 +37,34 @@ const timeBound = $extends(trackModify, {
 });
 
 const tables = {
-	"customer": $extends(namedEntity, idCol, {
-		role: { type: "enum", values: ["provider", "consumer"] }
-	}),
-	"serviceOffered": {
-		id: unique_pk,
-		offeredBy: fk("customer.id", "ManyToOne"),
-		location: latLong,
-		tags: [fk("tag.name", "ManyToMany")]
-	},
-	"serviceRequested": $extends(timeBound, idCol, {
-		requestedBy: fk("customer", "ManyToOne"),
-		tags: [fk("tag.name", "ManyToMany")]
-	}),
-	"tag": {
-		name: unique_pk("string")
-	},
-	"post": $extends(idCol, trackModify, {
-		"author": fk("customer"),
-		"keywords": ["string"]
+	// "customer": $extends(namedEntity, idCol, {
+	// 	role: { type: "enum", values: ["provider", "consumer"] },
+	// 	addresses: ["address"]
+	// }),
+	// "serviceOffered": {
+	// 	id: unique_pk,
+	// 	offeredBy: fk("customer.id", "ManyToOne"),
+	// 	location: latLong,
+	// 	tags: [fk("tag.name", "ManyToMany")]
+	// },
+	// "serviceRequested": $extends(timeBound, idCol, {
+	// 	requestedBy: fk("customer", "ManyToOne"),
+	// 	tags: [fk("tag.name", "ManyToMany")]
+	// }),
+	// "tag": {
+	// 	name: unique_pk("string")
+	// },
+	// "post": $extends(idCol, trackModify, {
+	// 	"author": fk("customer"),
+	// 	"keywords": ["string"]
+	// }),
+	"address": $extends(idCol, {
+		"street": "string",
+		"map": {
+			"geo": {
+				"location": latLong
+			}
+		}
 	})
 };
 

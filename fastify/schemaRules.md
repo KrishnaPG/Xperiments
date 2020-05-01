@@ -1,4 +1,8 @@
-- type can be specified directly as a string, or an object, or a function that returns an object
+- type can be specified directly as a:
+	- string: can specify a native type or a table name (with .fieldname optional)
+	- type object: has native type specified
+	- nested object: no type is specified
+	- function that returns a typed object
 - type can be an array
 	- array with single element -> array of that type
 	- array with multiple strings -> enum 

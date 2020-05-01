@@ -1,12 +1,45 @@
 
+class MigrationSource {
+	constructor() {
+		this.migrations = {};
+	}
+
+	// custom methods
+	addMigration(name, { up, down }) {
+		this.migrations[name] = { up, down };
+	}
+
+	// Required methods
+
+	// Must return a Promise containing a list of migrations. 
+	// Migrations can be whatever you want, they will be passed as
+	// arguments to getMigrationName and getMigration
+	getMigrations() {
+		return Promise.resolve(Object.keys(this.migrations));
+	}
+	getMigrationName(migration) {
+		console.log("getMigrationName: ", migration);
+		return migration;
+	}
+	getMigration(migration) {
+		console.log("getmigration for: ", migration);
+		return this.migrations[migration];
+	}
+};
+
+const migrationSource = new MigrationSource();
+
 // const knex = require('knex')({
 // 	client: 'sqlite3',
-// 	connection: { filename: './.db/db.sqlite' }
+// 	connection: { filename: __dirname + '/db.sqlite' },
+// 	migrations: { migrationSource }
 // });
+
 const ObjectPath = require('object-path');
 const { tables, builtIns, $extends } = require('./schemas');
+const { runScript } = require('./runScript');
 
-const supportedFieldTypes = {
+const builtInFieldTypes = {
 	"boolean": true,
 	"dateTime": true,
 	"enum": true,
@@ -16,6 +49,8 @@ const supportedFieldTypes = {
 	"text": true,
 	"uuid": true
 };
+
+const supportedFieldTypes = builtInFieldTypes;
 
 function isObjectNotEmpty(obj) {
 	for (let key in obj)
@@ -76,7 +111,12 @@ function normalizePendingTables(tables) {
 						normFldDefn = fldDefn(); break;
 					}
 					case "string": {
-						normFldDefn = { type: fldDefn }; break;
+						if (!builtInFieldTypes[fldDefn]) {
+							normFldDefn = { type: "fk", foreignKey: fldDefn };
+						}
+						else
+							normFldDefn = { type: fldDefn };
+						break;
 					}
 					case "object":
 					default: {
@@ -166,9 +206,11 @@ function fieldTypeCreation(fld, fldDefn) {
 function fieldString(fld, fldDefn) {	
 	let str = fieldTypeCreation(fld, fldDefn);
 	str += (fldDefn.nullable ? ".nullable()" : ".notNullable()");
+	if (fldDefn.default) str += `.defaultTo(${fldDefn.default})`;
 	if (fldDefn.unique) str += ".unique()";
 	if (fldDefn.index) str += ".index()";
-	if (fldDefn.default) str += `.defaultTo(${fldDefn.default})`;
+	if (fldDefn.primaryKey) str += ".primary()";
+	if (fldDefn.comment) str += `.comment(${fldDefn.comment})`;
 	return str;
 }
 
@@ -205,7 +247,19 @@ const { strUp, strDown } = generateTables(normalizedTables);
 
 console.log(strUp);
 console.log(strDown);
-
 console.log(normalizedTables);
 
+process.exit(0);
 
+const context = { up: null, down: null };
+runScript(`
+	up = knex => { ${strUp}	},
+	down = knex => {	${strDown} }
+`, context);
+
+migrationSource.addMigration("test1", context);
+
+knex.migrate.latest({  }).then(() => {
+	const list = knex.migrate.list({  });
+	console.log("migration list: ", JSON.stringify(list));
+}).catch(ex => console.error(ex, ex.stack));
