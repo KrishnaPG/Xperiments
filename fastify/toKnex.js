@@ -1,7 +1,34 @@
 
 class MigrationSource {
-	constructor() {
+	constructor(migrationsDB, currentUser) {
+		this.migrationsDB = migrationsDB;
+		this.currentUser = currentUser;
 		this.migrations = {};
+	}
+
+	static create(currentUser) {
+		const migrationsDB = require('knex')({
+			client: 'sqlite3',
+			connection: { filename: __dirname + '/migrations.sqlite' }
+		});
+		const tableName = "source";
+		return migrationsDB.schema.hasTable(tableName).then(exists => {
+			return exists ? new MigrationSource(migrationsDB, currentUser) : migrationsDB.schema.createTable(tableName, t => {
+				t.increments('id').primary().unique().notNullable();
+				t.string("name", 64).index().unique().notNullable();
+				t.text("source").notNullable(); // the knex migration module code
+				t.text("notes").nullable();
+				t.text("sourceRaw").notNullable(); // the json raw schema that was used in generating the migration code
+				t.datetime('createdAt', { precision: 6 }).index().notNullable();
+				t.string("createdBy", 32).index().nullable();
+			}).then(() => new MigrationSource(migrationsDB, currentUser));
+		});
+	}
+
+	close(onCloseCB) {
+		if (this.migrationsDB) {
+			this.migrationsDB.destroy(onCloseCB);
+		}
 	}
 
 	// custom methods
@@ -11,7 +38,7 @@ class MigrationSource {
 
 	// Required methods
 
-	// Must return a Promise containing a list of migrations. 
+	// Must return a Promise containing an array of migrations. 
 	// Migrations can be whatever you want, they will be passed as
 	// arguments to getMigrationName and getMigration
 	getMigrations() {
@@ -29,11 +56,11 @@ class MigrationSource {
 
 const migrationSource = new MigrationSource();
 
-// const knex = require('knex')({
-// 	client: 'sqlite3',
-// 	connection: { filename: __dirname + '/db.sqlite' },
-// 	migrations: { migrationSource }
-// });
+const knex = require('knex')({
+	client: 'sqlite3',
+	connection: { filename: __dirname + '/db.sqlite' },
+	migrations: { migrationSource }
+});
 
 const ObjectPath = require('object-path');
 const { tables, builtIns, $extends } = require('./schemas');
@@ -71,79 +98,108 @@ function addNewRelation(tbl, fld, fldDefn, pendingRelations) {
 	pendingRelations[tbl][fld] = fldDefn;
 }
 
-function expandNestedType(tbl, fld, fldDefn, normTables) {
+function expandTypedChild(tbl, fld, fldDefn, pendingFields) {
 	for (let [childFld, childFldDefn] of Object.entries(fldDefn.properties)) {
-		if (!supportedFieldTypes[childFldDefn.type])
-			throw new Error(`${tbl}.${fld}.${childFld} unsupported nested type: ${childFldDefn.type}`);
+		// if (!supportedFieldTypes[childFldDefn.type])
+		// 	throw new Error(`${tbl}.${fld}.${childFld} unsupported nested type: ${childFldDefn.type}`);
 		const nestedFieldName = `${fld}_${childFld}`;
-		if (normTables[tbl][nestedFieldName])
-			throw new Error(`${tbl}.${fld}.${childFld} nested field with name "${nestedFieldName}" already exists !!`);
-		normTables[tbl][nestedFieldName] = childFldDefn;
+		// if (normTables[tbl][nestedFieldName])
+		// 	throw new Error(`${tbl}.${fld}.${childFld} nested field with name "${nestedFieldName}" already exists !!`);
+		pendingFields[nestedFieldName] = childFldDefn;
+	}
+}
+
+function expandUnTypedChild(tbl, fld, fldDefn, pendingFields) {
+	for (let [childFld, childFldDefn] of Object.entries(fldDefn)) {
+		pendingFields[`${fld}_${childFld}`] = childFldDefn;
+	}
+}
+
+function normalizeTable(tbl, tblDefn, normTables) {
+	const pendingFields = {};
+	const pendingTables = {};
+	const pendingRelations = {};
+	const normFields = normTables[tbl];
+
+	for (let [fld, fldDefn] of Object.entries(tblDefn)) {
+		let normFldDefn = null;
+
+		// normalize the structure
+		if (Array.isArray(fldDefn)) {
+			if (!fldDefn.length)
+				throw new Error(`${tbl}.${fld} should not be an empty array`);
+			if (fldDefn.length === 1) {
+				// an array of some type - needs a new table
+				addNewTable(`${tbl}_${fld}`, tbl, fld, fldDefn, pendingTables);
+				continue;
+			} else if (fldDefn.length > 1) {
+				// must be enum values
+				normFldDefn = { type: "enum", values: fldDefn };
+			}
+		} else {
+			switch (typeof fldDefn) {
+				case "function": {
+					normFldDefn = fldDefn(); break;
+				}
+				case "string": {
+					if (!builtInFieldTypes[fldDefn]) {
+						normFldDefn = { type: "fk", foreignKey: fldDefn };
+					}
+					else
+						normFldDefn = { type: fldDefn };
+					break;
+				}
+				case "object":
+				default: {
+					normFldDefn = fldDefn; break;
+				}
+			}
+		}
+
+		// postpone processing foreign-key relation till all tables are done
+		if (normFldDefn.type === "fk") {
+			addNewRelation(tbl, fld, normFldDefn, pendingRelations);
+			continue;
+		}
+		else if (normFldDefn.type === "object") {
+			expandTypedChild(tbl, fld, normFldDefn, pendingFields);
+			continue;
+		}
+		else if (isObjectNotEmpty(normFldDefn) && !normFldDefn.type) {
+			expandUnTypedChild(tbl, fld, normFldDefn, pendingFields);
+			continue;
+		}
+
+		// sanity checks for the normFldDefn
+		if (!supportedFieldTypes[normFldDefn.type])
+			throw new Error(`${tbl}.${fld} has unknown type: ${normFldDefn.type}`);
+		// check if field name already exists (happens nested types expand to same name)
+		if (normFields[fld])
+			throw new Error(`${tbl} encountered duplicate field with same name "${fld}"`);
+
+		normFields[fld] = normFldDefn;
+	}
+	return {
+		pendingFields,
+		pendingTables,
+		pendingRelations
 	}
 }
 
 function normalizePendingTables(tables) {
 	const normTables = {};
-	const pendingTables = {};
-	const pendingRelations = {};
+	let pendingTables = {};
+	let pendingRelations = {};
 
 	for (let [tbl, tblDefn] of Object.entries(tables)) {
 		normTables[tbl] = {};
-		const normFields = normTables[tbl];
-		for (let [fld, fldDefn] of Object.entries(tblDefn)) {
-			let normFldDefn = null;
-
-			// normalize the structure
-			if (Array.isArray(fldDefn)) {
-				if (!fldDefn.length)
-					throw new Error(`${tbl}.${fld} should not be an empty array`);
-				if (fldDefn.length === 1) {
-					// an array of some type - needs a new table
-					addNewTable(`${tbl}_${fld}`, tbl, fld, fldDefn, pendingTables);
-					continue;
-				} else if (fldDefn.length > 1) {
-					// must be enum values
-					normFldDefn = { type: "enum", values: fldDefn };
-				}
-			} else {
-				switch (typeof fldDefn) {
-					case "function": {
-						normFldDefn = fldDefn(); break;
-					}
-					case "string": {
-						if (!builtInFieldTypes[fldDefn]) {
-							normFldDefn = { type: "fk", foreignKey: fldDefn };
-						}
-						else
-							normFldDefn = { type: fldDefn };
-						break;
-					}
-					case "object":
-					default: {
-						normFldDefn = fldDefn; break;
-					}
-				}
-			}
-
-			// postpone processing foreign-key relation till all tables are done
-			if (normFldDefn.type === "fk") {
-				addNewRelation(tbl, fld, normFldDefn, pendingRelations);
-				continue;
-			}
-			else if (normFldDefn.type === "object") {
-				expandNestedType(tbl, fld, normFldDefn, normTables);
-				continue;
-			}
-
-			// sanity checks for the normFldDefn
-			if (!supportedFieldTypes[normFldDefn.type])
-				throw new Error(`${tbl}.${fld} has unknown type: ${normFldDefn.type}`);
-			// check if field name already exists (happens nested types expand to same name)
-			if (normFields[fld])
-				throw new Error(`${tbl} encountered duplicate field with same name "${fld}"`);
-			
-			normFields[fld] = normFldDefn;
-		} // for fld
+		let pendingFields = tblDefn;
+		while (isObjectNotEmpty(pendingFields))	{
+			const result = normalizeTable(tbl, pendingFields, normTables);
+			pendingTables = $extends(pendingTables, result.pendingTables);
+			pendingRelations = $extends(pendingRelations, result.pendingRelations);
+			pendingFields = result.pendingFields;
+		}
 	}
 
 	return {
@@ -249,17 +305,16 @@ console.log(strUp);
 console.log(strDown);
 console.log(normalizedTables);
 
-process.exit(0);
-
 const context = { up: null, down: null };
 runScript(`
 	up = knex => { ${strUp}	},
 	down = knex => {	${strDown} }
 `, context);
 
-migrationSource.addMigration("test1", context);
+migrationSource.addMigration("test2", context);
 
 knex.migrate.latest({  }).then(() => {
 	const list = knex.migrate.list({  });
 	console.log("migration list: ", JSON.stringify(list));
+	knex.destroy();
 }).catch(ex => console.error(ex, ex.stack));
