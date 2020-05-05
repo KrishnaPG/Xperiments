@@ -53,19 +53,20 @@ class MigrationSource {
 
 	_readMigrationSrcFromDB(query) {
 		return this.migrationsDB.select().from(MigrationSource._TableName).where(query).limit(1).then(result => {
-			console.log("db result: ", result);
+			if (!result || result.length <= 0)
+				throw new Error(`Loading migration with query: ${query} has no results`);
+			const dbEntry = result[0];
 			if (this.verifyDBEntry) {
-				if (MigrationSource.getHash(result.source) !== result.sourceHash)
-					return null;
+				if (MigrationSource.getHash(dbEntry.source) !== dbEntry.sourceHash)
+					throw new Error(`Integrity check failed while loading migration source for ${query} `);
 			}
-			return result.source;
+			return dbEntry.source;
 		});
 	}
 
 	// custom methods
 	addMigration(strUp, strDown, normalizedTables, rawSchema, name = MigrationSource._Defaults.getUniqueStr()) {
 		const source = `up = knex => { ${strUp}	},	down = knex => {	${strDown} }`;
-		const sourceHash = MigrationSource.getHash(source); console.log("hash: ", sourceHash, " length: ", sourceHash.length);
 		const m = {
 			name,
 			source,
@@ -87,8 +88,8 @@ class MigrationSource {
 	// For simplicity, we are returning array of names directly.
 	getMigrations() {
 		return this.migrationsDB.select("name").from(MigrationSource._TableName).limit(this.activeRecordsLimit).then(result => {
-			console.log("result: ", result);
-			return result;
+			console.log("getMigrations result: ", result);
+			return result.map(dbEntry => dbEntry.name);
 		});
 	}
 

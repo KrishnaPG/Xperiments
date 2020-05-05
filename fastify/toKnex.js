@@ -25,7 +25,7 @@ MigrationSource.create().then(migrationSource => {
 	const { strUp, strDown } = generateTables(normalizedTables);
 
 	return migrationSource.addMigration(strUp, strDown, normalizedTables, tables)
-		.catch(ex => console.error("addMigration error: ", ex.message))
+		.catch(ex => console.error("Failed to add Migration"))
 		.then(() => knex.migrate.latest())
 		.then(() => knex.migrate.list())
 		.then(list => {
