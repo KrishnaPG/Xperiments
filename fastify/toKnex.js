@@ -1,19 +1,36 @@
 const Knex = require('knex');
 const MigrationSource = require('./migrationSrc');
-const { normalizeTables, generateTables } = require('./migrationGen');
+
+const { normalizeTables, generateMigrationString, isRelationTable } = require('./migrationGen');
+const { builtIns, $extends } = require('./schemaUtils');
+const { runScript: strToMigrationModule } = require('./runScript');
 
 const { tables } = require('./schemas');
 
-// console.log(strUp);
-// console.log(strDown);
-// console.log(normalizedTables);
+const MetaBase = require('./meta');
 
-// const context = { up: null, down: null };
-// runScript(`
-// 	up = knex => { ${strUp}	},
-// 	down = knex => {	${strDown} }
-// `, context);
 
+
+
+
+MetaBase.init().then(metaDB => {
+	//console.log("metaDB: ", metaDB);
+
+	const knex = Knex({
+		client: 'sqlite3',
+		connection: { filename: __dirname + '/db.sqlite' }
+	});
+
+	return metaDB.runMigration(knex, tables)
+		.catch(ex => console.error(`Failure: `, typeof ex === "string" ? ex : ex.message))
+		.finally(() => {
+			knex.destroy();
+			metaDB.close();
+		});
+}).catch(ex => console.error(typeof ex === "string" ? ex : ex.message));
+
+
+/*
 MigrationSource.create().then(migrationSource => {
 	const knex = Knex({
 		client: 'sqlite3',
@@ -21,7 +38,7 @@ MigrationSource.create().then(migrationSource => {
 		migrations: { migrationSource }
 	});
 
-	const normalizedTables = normalizeTables(tables);
+	const normalizedTables = normalizeTables(tables); console.log(" normalized tables: ", normalizedTables); process.exit(0);
 	const { strUp, strDown } = generateTables(normalizedTables);
 
 	return migrationSource.addMigration(strUp, strDown, normalizedTables, tables)
@@ -36,4 +53,4 @@ MigrationSource.create().then(migrationSource => {
 			knex.destroy();
 			migrationSource.close();
 		});
-});
+}); */

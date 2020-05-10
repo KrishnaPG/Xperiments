@@ -1,6 +1,6 @@
 
 const ObjectPath = require('object-path');
-const { builtIns, $extends } = require('./schemas');
+const { builtIns, $extends } = require('./schemaUtils');
 
 const builtInFieldTypes = {
 	"boolean": true,
@@ -12,8 +12,13 @@ const builtInFieldTypes = {
 	"text": true,
 	"uuid": true
 };
+const extendedFieldTypes = {
+	// "increments": true // may endup being used as foreign key reference type
+};
+const supportedFieldTypes = Object.assign({}, builtInFieldTypes, extendedFieldTypes);
 
-const supportedFieldTypes = builtInFieldTypes;
+const ThreeDigitRandomId = () => (100 + Math.floor(Math.random() * 899));
+const RelationTableNameRegEx = /^\$rel_(?<relName>[\w\._-]+)_\d{0,3}$/;
 
 function isObjectNotEmpty(obj) {
 	for (let key in obj)
@@ -66,7 +71,7 @@ function normalizeTable(tbl, tblDefn, normTables) {
 				throw new Error(`${tbl}.${fld} should not be an empty array`);
 			if (fldDefn.length === 1) {
 				// an array of some type - needs a new table
-				addNewTable(`${tbl}_${fld}`, tbl, fld, fldDefn, pendingTables);
+				addNewTable(`$rel_${tbl}_${fld}_`, tbl, fld, fldDefn, pendingTables);
 				continue;
 			} else if (fldDefn.length > 1) {
 				// must be enum values
@@ -75,7 +80,7 @@ function normalizeTable(tbl, tblDefn, normTables) {
 		} else {
 			switch (typeof fldDefn) {
 				case "function": {
-					normFldDefn = fldDefn(); break;
+					normFldDefn = fldDefn(fld, tbl, tblDefn); break;
 				}
 				case "string": {
 					if (!builtInFieldTypes[fldDefn]) {
@@ -153,7 +158,7 @@ function normalizePendingRelations(pendingRelations, normTables) {
 				fldDefn.foreignKey += ".id";
 			// get the type definition of the referred foreign key
 			const referredTypeDefn = ObjectPath.get(normTables, fldDefn.foreignKey);
-			if (!referredTypeDefn || !referredTypeDefn.type)
+			if (!referredTypeDefn || !referredTypeDefn.type || !builtInFieldTypes[referredTypeDefn.type])
 				throw new Error(`${tbl}.${fld} Invalid foreign key reference: ${fldDefn.foreignKey}`);
 			if (referredTypeDefn.foreignKey)
 				throw new Error(`${tbl}.${fld} is a foreign key pointing to another foreign key: ${referredTypeDefn.foreignKey}`);
@@ -207,8 +212,8 @@ function fieldString(fld, fldDefn) {
 }
 
 function fieldReferences(fld, fldDefn) {
-	return fldDefn.foreign ?
-		`;\n\tt.foreign("${fld}").references("${fldDefn.references}")` :
+	return fldDefn.foreignKey ?
+		`;\n\tt.foreign("${fld}").references("${fldDefn.foreignKey}")` :
 		"";
 }
 
@@ -220,21 +225,23 @@ function tableString(tbl, tblDefn) {
 	return str += "})";
 }
 
-function generateTables(tables) {
+function generateMigrationStrings(tables, normalized = false) {
+	const normalizedTables = normalized ? tables : normalizeTables(tables);
 	let strUp = "return knex.schema";
 	let strDown = "return knex.schema";
 	{
-		for (let [tbl, tblDefn] of Object.entries(tables)) {
+		for (let [tbl, tblDefn] of Object.entries(normalizedTables)) {
 			strDown += `.dropTableIfExists("${tbl}")`;
 			strUp += tableString(tbl, tblDefn);
 		}
 	}
 	strUp += ";";
 	strDown += ";";
-	return { strUp, strDown };
+	return { strUp, strDown, normalizedTables };
 }
 
 module.exports = {
 	normalizeTables,
-	generateTables
+	generateMigrationStrings,
+	isRelationTable: (name) => RelationTableNameRegEx.exec(name)
 }

@@ -42,22 +42,6 @@ fastify.get('/api/*', {
 		res.send({ req: req.params });
 });
 
-/* Declare a route
-fastify.get('/:aavType/:aavPath', function (request, reply) {
-	
-	console.log("body", request.body)
-	console.log("query", request.query)
-	console.log("params", request.params)
-	console.log("headers", request.headers)
-	console.log("raw", request.raw)
-	console.log("id", request.id)
-	console.log("ip", request.ip)
-	console.log("ips", request.ips)
-	console.log("hostname", request.hostname);  
-	reply.send({ type: request.params.aavType, path: request.params.aavPath });
-})
-*/
-
 // Run the server!
 fastify.listen(3000, '0.0.0.0', function (err, address) {
 	if (err) {
