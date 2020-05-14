@@ -11,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "cbor": "^5.0.2",
+    "borc": "^2.1.2",
     "fastify": "^2.13.1",
     "knex": "^0.21.1",
     "object-path": "^0.11.4",

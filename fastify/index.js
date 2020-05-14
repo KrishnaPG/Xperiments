@@ -42,6 +42,11 @@ fastify.get('/api/*', {
 		res.send({ req: req.params });
 });
 
+fastify.addHook('onClose', (instance, done) => {
+	// instance.kenx.destroy();
+	done();
+});
+
 // Run the server!
 fastify.listen(3000, '0.0.0.0', function (err, address) {
 	if (err) {

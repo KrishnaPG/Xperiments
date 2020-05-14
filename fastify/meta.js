@@ -1,10 +1,15 @@
 const { performance } = require('perf_hooks');
 
+const CBOR = require('borc');
 const Knex = require('knex');
+const Sodium = require('sodium-native');
 
 const { generateMigrationStrings, isRelationTable } = require('./migrationGen');
 const { builtIns, $extends } = require('./schemaUtils');
 const { runScript: strToMigrationModule } = require('./runScript');
+const { generateCollections } = require('./collectionGen');
+
+// Nullable is false by default
 
 const meta = {
 	tables: $extends(builtIns.idCol, builtIns.trackModify, {
@@ -31,12 +36,13 @@ const meta = {
 		isArray: { type: "boolean", nullable: true },
 		joinTable: { type: "string", nullable: true }	// only valid when isArray is true
 	}),
-	migrations: $extends(builtIns.idCol, {
-		normTables: "text",
+	migrations: {
+		id: { type: "string", max: 48, primaryKey: true, index: true, unique: true, nullable: false }, // == hash of normTables
+		cborNormTables: "text",	// CBOR representation of normalized tables
 		strUp: "text",
 		strDown: "text",
 		executedAt: "dateTime"
-	})
+	}
 };
 
 
@@ -127,6 +133,7 @@ class MetaBase {
 	constructor(metaDB) {
 		this.metaDB = metaDB;		
 	}
+	
 	static _Defaults = {
 		DB_Config: {
 			client: 'sqlite3',
@@ -136,6 +143,13 @@ class MetaBase {
 			useNullAsDefault: true
 		}
 	};
+
+	static _bufHash = Buffer.alloc(Sodium.crypto_generichash_BYTES);
+	static _getHash = (srcStr) => {
+		Sodium.crypto_generichash(MetaBase._bufHash, Buffer.from(srcStr));
+		return MetaBase._bufHash.toString("base64");
+	};
+	
 	static init(knexConfig = MetaBase._Defaults.DB_Config) {
 		const metaDB = Knex(knexConfig);
 		return metaDB.schema.hasTable("tables").then(exists => {
@@ -152,25 +166,34 @@ class MetaBase {
 			throw new Error(`MetaBase.init() failed: ${ex.message}`);
 		}).then(() => new MetaBase(metaDB));
 	}
+
 	close(onCloseCB) {
 		if (this.metaDB)
 			this.metaDB.destroy(onCloseCB);
 	}
+
 	runMigration(knex, tables) {
 		const { strUp, strDown, normalizedTables } = generateMigrationStrings(tables, false);
-		const { tablesMeta, fieldsMeta } = prepareMetadata(normalizedTables);
-		const migStr = `up = knex => { ${strUp}	},	down = knex => {	${strDown} }`;
-		const context = { up: null, down: null };
-		const migModule = strToMigrationModule(migStr, context); // convert to callable module
-		return this.metaDB.transaction(trx => {
-			// save the migration scripts, and meta data first
-			const migrationObj = { id: getSequentialIds(1)[0], normTables: JSON.stringify(normalizedTables), strUp, strDown, executedAt: new Date() };
-			return this.metaDB.insert(migrationObj).into("migrations").transacting(trx)
-				.then(() => this.metaDB.insert(tablesMeta).into("tables").transacting(trx))
-				.then(() => this.metaDB.insert(fieldsMeta).into("fields").transacting(trx))
-				.then(() => migModule.up(knex))	// execute the migration
-				.then(() => trx.commit())
-				.catch(ex => migModule.down(knex).then(() => trx.rollback(ex)));	// rollback the migration and metadata inserts
+		const cborNormTables = CBOR.encode(normalizedTables);
+		const id = MetaBase._getHash(cborNormTables);
+		return this.metaDB.select("id").from("migrations").where({ id }).limit(1).then(result => {
+			if (result && result.length >= 1) return result[0]; // avoid duplicates
+
+			const { tablesMeta, fieldsMeta } = prepareMetadata(normalizedTables);
+			const migStr = `up = knex => { ${strUp}	},	down = knex => {	${strDown} }`;
+			const context = { up: null, down: null };
+			const migModule = strToMigrationModule(migStr, context); // convert to callable module
+
+			return this.metaDB.transaction(trx => {
+				// save the migration scripts, and meta data first
+				const migrationObj = { id, cborNormTables, strUp, strDown, executedAt: new Date() };
+				return this.metaDB.insert(migrationObj).into("migrations").transacting(trx)
+					.then(() => this.metaDB.insert(tablesMeta).into("tables").transacting(trx))
+					.then(() => this.metaDB.insert(fieldsMeta).into("fields").transacting(trx))
+					.then(() => migModule.up(knex))	// execute the migration
+					.then(() => trx.commit())
+					.catch(ex => migModule.down(knex).then(() => trx.rollback(ex)));	// rollback the migration and metadata inserts
+			});
 		});
 	}
 }
