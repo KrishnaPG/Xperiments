@@ -1,4 +1,6 @@
-const $extends = (...args) => Object.assign({}, ...args);
+const Merge = require('lodash.merge')
+
+const $extends = (...args) => Merge({}, ...args);
 
 const firstName = () => ({ type: "string", max: 64, nullable: false, default: "", index: true });
 const lastName = () => ({ type: "string", max: 64, nullable: false, default: "", index: true });
@@ -17,6 +19,9 @@ const autoInc = Object.freeze({
 const idCol = Object.freeze({
 	id: unique_pk(),
 });
+const idHashCol = Object.freeze({
+	type: "string", max: 48, primaryKey: true, index: true, unique: true, nullable: false
+});
 const trackModify = Object.freeze({
 	createdAt: "dateTime",
 	modifiedAt: "dateTime"
@@ -27,6 +32,6 @@ const timeBound = $extends(trackModify, {
 });
 
 module.exports = {
-	builtIns: { namedEntity, autoInc, idCol, trackModify, timeBound, pk, unique_pk, fk },
+	builtIns: { namedEntity, autoInc, idCol, idHashCol, trackModify, timeBound, pk, unique_pk, fk },
 	$extends	
 }

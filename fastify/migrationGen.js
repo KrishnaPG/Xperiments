@@ -56,6 +56,47 @@ function expandUnTypedChild(tbl, fld, fldDefn, pendingFields) {
 	}
 }
 
+function normalizeFieldDefn(tbl, fld, fldDefn, pendingTables, isArrayAllowed = true) {
+	// normalize the structure
+	if (Array.isArray(fldDefn)) {
+		if (!isArrayAllowed)
+			throw new Error(`${tbl}.${fld} invalid array found ${JSON.stringify(fldDefn, null, "  ")}`);
+		if (!fldDefn.length)
+			throw new Error(`${tbl}.${fld} should not be an empty array`);
+		if (fldDefn.length === 1) {
+			const newTableName = `$rel_${tbl}_${fld}_`;
+			// an array of some type - needs a new table
+			addNewTable(newTableName, tbl, fld, fldDefn, pendingTables);
+			// add the field to the tbl and mark it as array
+			if (!pendingTables[tbl])
+				pendingTables[tbl] = {};
+			pendingTables[tbl][fld] = $extends(normalizeFieldDefn(tbl, fld, fldDefn[0], pendingTables, false),{ isArray: true, relationTable: newTableName });
+			return null;
+		} else if (fldDefn.length > 1) {
+			// must be enum values
+			return { type: "enum", values: fldDefn };
+		}
+	} else {
+		switch (typeof fldDefn) {
+			case "function": {
+				return fldDefn(fld, tbl);
+			}
+			case "string": {
+				if (!builtInFieldTypes[fldDefn]) {
+					return { type: "fk", foreignKey: fldDefn };
+				}
+				else
+					return { type: fldDefn };
+				break;
+			}
+			case "object":
+			default: {
+				return fldDefn; break;
+			}
+		}
+	}
+}
+
 function normalizeTable(tbl, tblDefn, normTables) {
 	const pendingFields = {};
 	const pendingTables = {};
@@ -63,39 +104,9 @@ function normalizeTable(tbl, tblDefn, normTables) {
 	const normFields = normTables[tbl];
 
 	for (let [fld, fldDefn] of Object.entries(tblDefn)) {
-		let normFldDefn = null;
-
 		// normalize the structure
-		if (Array.isArray(fldDefn)) {
-			if (!fldDefn.length)
-				throw new Error(`${tbl}.${fld} should not be an empty array`);
-			if (fldDefn.length === 1) {
-				// an array of some type - needs a new table
-				addNewTable(`$rel_${tbl}_${fld}_`, tbl, fld, fldDefn, pendingTables);
-				continue;
-			} else if (fldDefn.length > 1) {
-				// must be enum values
-				normFldDefn = { type: "enum", values: fldDefn };
-			}
-		} else {
-			switch (typeof fldDefn) {
-				case "function": {
-					normFldDefn = fldDefn(fld, tbl, tblDefn); break;
-				}
-				case "string": {
-					if (!builtInFieldTypes[fldDefn]) {
-						normFldDefn = { type: "fk", foreignKey: fldDefn };
-					}
-					else
-						normFldDefn = { type: fldDefn };
-					break;
-				}
-				case "object":
-				default: {
-					normFldDefn = fldDefn; break;
-				}
-			}
-		}
+		const normFldDefn = normalizeFieldDefn(tbl, fld, fldDefn, pendingTables);
+		if (!normFldDefn) continue;
 
 		// postpone processing foreign-key relation till all tables are done
 		if (normFldDefn.type === "fk") {
@@ -167,6 +178,12 @@ function normalizePendingRelations(pendingRelations, normTables) {
 			delete fldType.unique;
 			delete fldType.default;
 			delete fldType.primaryKey;
+			// set type of array meta fields to be the referred table
+			if (fldDefn.isArray && fldDefn.relationTable) {
+				fldType.isArray = true;
+				fldType.relationTable = fldDefn.relationTable;
+				fldType.type = fldDefn.foreignKey.split('.')[0];
+			}
 			normTables[tbl][fld] = fldType;
 		}
 	}
@@ -220,9 +237,10 @@ function fieldReferences(fld, fldDefn) {
 function tableString(tbl, tblDefn) {
 	let str = `.createTable("${tbl}", t => { \n`;
 	for (let [fld, fldDefn] of Object.entries(tblDefn)) {
+		if (fldDefn.isArray && fldDefn.relationTable) continue; // skip meta fields
 		str += "\t" + fieldString(fld, fldDefn) + fieldReferences(fld, fldDefn) + "; \n";
 	}
-	return str += "})";
+	return str += "})"; // TODO: can we add a unique constraint to all fields of a relation table?
 }
 
 function generateMigrationStrings(tables, normalized = false) {
@@ -243,5 +261,9 @@ function generateMigrationStrings(tables, normalized = false) {
 module.exports = {
 	normalizeTables,
 	generateMigrationStrings,
-	isRelationTable: (name) => RelationTableNameRegEx.exec(name)
+	isRelationTable: (name) => RelationTableNameRegEx.exec(name),
+
+	builtInFieldTypes,
+	extendedFieldTypes,
+	supportedFieldTypes
 }
