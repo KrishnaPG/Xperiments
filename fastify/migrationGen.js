@@ -8,11 +8,14 @@ const builtInFieldTypes = {
 	"enum": true,
 	"float": true,
 	"integer": true,
+	"json": true,
+	"jsonb": true,
 	"string": true,
 	"text": true,
 	"uuid": true
 };
 const extendedFieldTypes = {
+	"code": { type: "text", format: "code", nullable: true }
 	// "increments": true // may endup being used as foreign key reference type
 };
 const supportedFieldTypes = Object.assign({}, builtInFieldTypes, extendedFieldTypes);
@@ -39,21 +42,20 @@ function addNewRelation(tbl, fld, fldDefn, pendingRelations) {
 	pendingRelations[tbl][fld] = fldDefn;
 }
 
-function expandTypedChild(tbl, fld, fldDefn, pendingFields) {
-	for (let [childFld, childFldDefn] of Object.entries(fldDefn.properties)) {
-		// if (!supportedFieldTypes[childFldDefn.type])
-		// 	throw new Error(`${tbl}.${fld}.${childFld} unsupported nested type: ${childFldDefn.type}`);
-		const nestedFieldName = `${fld}_${childFld}`;
-		// if (normTables[tbl][nestedFieldName])
-		// 	throw new Error(`${tbl}.${fld}.${childFld} nested field with name "${nestedFieldName}" already exists !!`);
-		pendingFields[nestedFieldName] = childFldDefn;
+function expandNestedChild(tbl, fld, fldDefn, pendingFields, typed = false) {
+	for (let [childFld, childFldDefn] of Object.entries(typed ? fldDefn.properties : fldDefn)) {
+		if (childFld.indexOf('.') >= 0)
+			throw new Error(`Nested fields should not contain . in their name. Invalid field "${childFld}" of "${fld}" for "${tbl}"`);
+		pendingFields[`${fld}.${childFld}`] = childFldDefn;
 	}
 }
 
+function expandTypedChild(tbl, fld, fldDefn, pendingFields) {
+	expandNestedChild(tbl, fld, fldDefn, pendingFields, true);
+}
+
 function expandUnTypedChild(tbl, fld, fldDefn, pendingFields) {
-	for (let [childFld, childFldDefn] of Object.entries(fldDefn)) {
-		pendingFields[`${fld}_${childFld}`] = childFldDefn;
-	}
+	expandNestedChild(tbl, fld, fldDefn, pendingFields, false);
 }
 
 function normalizeFieldDefn(tbl, fld, fldDefn, pendingTables, isArrayAllowed = true) {
@@ -128,6 +130,11 @@ function normalizeTable(tbl, tblDefn, normTables) {
 		// check if field name already exists (happens nested types expand to same name)
 		if (normFields[fld])
 			throw new Error(`${tbl} encountered duplicate field with same name "${fld}"`);
+		// sanitize the nested field names
+		if (fld.indexOf('.') >= 0) {
+			normFldDefn.pathInInput = fld;
+			fld = fld.replace(/\./g, '_');
+		}
 
 		normFields[fld] = normFldDefn;
 	}
@@ -183,7 +190,7 @@ function normalizePendingRelations(pendingRelations, normTables) {
 				fldType.isArray = true;
 				fldType.relationTable = fldDefn.relationTable;
 				fldType.type = fldDefn.foreignKey.split('.')[0];
-			}
+			}			
 			normTables[tbl][fld] = fldType;
 		}
 	}

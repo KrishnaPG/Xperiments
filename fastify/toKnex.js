@@ -2,10 +2,10 @@ const Knex = require('knex');
 const MetaBase = require('./meta');
 
 const { tables } = require('./schemas');
-const { generateCollections } = require('./collectionGen');
+const { callOnCollection } = require('./collectionAPI');
 
 
-MetaBase.init().then(metaDB => {
+MetaBase.init().then(metaBase => {
 	//console.log("metaDB: ", metaDB);
 
 	const knex = Knex({
@@ -14,11 +14,14 @@ MetaBase.init().then(metaDB => {
 		useNullAsDefault: true
 	});
 
-	return metaDB.runMigration(knex, tables)
+	return metaBase.runMigration(knex, tables)
+		.then(record => { if (record) console.log("Migration skipped, record already exists: ", record); })
 		.catch(ex => console.error(`Failure: `, typeof ex === "string" ? ex : ex.message))
-		.then(record => console.log("Migration skipped, record already exists: ", record))
+		.then(() => {
+			return callOnCollection(metaBase.db, knex, "customer", "insertOne", require('./data').customer);
+		})
 		.finally(() => {
 			knex.destroy();
-			metaDB.close();
+			metaBase.close();
 		});
-}).catch(ex => console.error(typeof ex === "string" ? ex : ex.message));
+}).catch(ex => console.error(ex));
