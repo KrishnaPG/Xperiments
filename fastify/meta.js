@@ -22,7 +22,11 @@ const meta = {
 	schepes: $extends(builtIns.idHashCol, builtIns.trackModify, {
 		name: { type: "string", unique: true, nullable: false, index: true, max: 32 },
 		schema: "text",
-		validation: "text",	// validation in JSON-schema format
+		validation: "text",				// schema validation in JSON-schema format
+		baseFields: "jsonb",			// field names array
+		fkFields: "jsonb",				// field names array
+		relationFields: "jsonb",	// field names array 
+		insertOne: "jsonb",				// query for base field insertion (does not tackle relation fields)
 	}),
 	fields: $extends(builtIns.idCol, builtIns.trackModify, {
 		name: { type: "string", index: true, nullable: false, max: 64 },	// can have long nested fields
@@ -55,7 +59,8 @@ const meta = {
 		schepe: "schepes",
 		insertOne: "jsonb",
 		findOne: "jsonb",
-		findMany: "jsonb"
+		findMany: "jsonb",
+		builtIn: "boolean"	// is this a builtIn collection or user-defined?
 	})
 };
 
@@ -64,10 +69,9 @@ function getTableNameFromForeignKey(foreignKey) {
 	return foreignKey.split(".", 1)[0];
 }
 
-function prepareMetadata(normalizedTables) {
+function prepareMetadata(knex, normalizedTables) {
 	const tablesMeta = {};
 	const fieldsMeta = [];
-	const relationTables = {};
 	const createdAt = new Date();
 	const modifiedAt = createdAt;
 	const fieldDefaults = { index: false, nullable: false, unique: false, primaryKey: false, createdAt, modifiedAt };
@@ -75,17 +79,46 @@ function prepareMetadata(normalizedTables) {
 	// first give ids to all tables. IDs are based on hash of the table definition
 	for (let [tbl, tblDefn] of Object.entries(normalizedTables)) {
 		// we do not track the derived relation tables in the metaDB
-		if (!isRelationTable(tbl)) {
-			// this is a normal table. Create an ID for it based on its definition's hash
-			const cborDefn = CBOR.encode(tblDefn);
-			tablesMeta[tbl] = {
-				name: tbl,
-				id: MetaBase._getHash(cborDefn),
-				createdAt, modifiedAt,
-				schema: JSON.stringify(tblDefn, null, " "),
-				validation: "{}"
-			};
-		}
+		if (isRelationTable(tbl)) continue;
+
+		const fieldNames = Object.keys(tblDefn);
+
+		// extract all fields into their categories
+		const { baseFields, fkFields, relationFields } = fieldNames.reduce((acc, fld) => {
+			const field = tblDefn[fld];
+			if (field.isArray && field.relationTable)
+				acc.relationFields.push(fld);
+			if (field.foreignKey)
+				acc.fkFields.push(fld);
+			if (!field.foreignKey && !field.relationTable)
+				acc.baseFields.push(fld);
+			return acc;
+		}, { baseFields: [], fkFields: [], relationFields: [] });
+
+		// convert all foreignKeys to point to their schepe IDs
+		fkFields.forEach(fld => { 
+			const fldDefn = tblDefn[fld];
+			const referredTable = getTableNameFromForeignKey(fldDefn.foreignKey);
+			const referredSchepe = tablesMeta[referredTable];
+			if (!referredSchepe || !referredSchepe.id) {
+				throw new Error(`${tbl}.${fld} points to "${fldDefn.type}" that cannot be resolved. \n${JSON.stringify(fldDefn, null, "  ")}`);
+			}
+			fldDefn.type = referredSchepe.id; // points to the whole remote object
+			fldDefn.foreignKey = fldDefn.foreignKey.replace(referredTable, ''); // points to the specific path inside the remote object
+		});
+
+		// Create an ID for it based on its definition's hash
+		const cborDefn = CBOR.encode(tblDefn);
+		tablesMeta[tbl] = {
+			name: tbl,
+			id: MetaBase._getHash(cborDefn),
+			createdAt, modifiedAt,
+			schema: JSON.stringify(tblDefn, null, " "),	// here we are not converting the field type to their IDs, which will allow us to use it as collection name
+			validation: "{}",
+			baseFields: JSON.stringify(baseFields, null, " "),
+			fkFields: JSON.stringify(fkFields, null, " "),
+			relationFields: JSON.stringify(relationFields, null, " "),
+		};
 	}
 	
 	// create the fields Meta
@@ -94,29 +127,33 @@ function prepareMetadata(normalizedTables) {
 		const schepe = tblMeta.id;
 		const fieldNames = Object.keys(tblDefn);
 		const fieldCount = fieldNames.length;
-		const ids = getSequentialIds(fieldCount); // plus one for the table itself
+		const ids = getSequentialIds(fieldCount);
 		
 		for (let i = 0; i < fieldCount; ++i) {
 			const name = fieldNames[i];
 			const fldDefn = tblDefn[name];
-			fieldsMeta.push(Merge({}, fieldDefaults, fldDefn, { name, schepe, id: ids[i] }));
-			
-			// resolve the schepe references for array foreign key fields
-			if (fldDefn.isArray && fldDefn.foreignKey) {
-				const fldDefn = fieldsMeta[fieldsMeta.length - 1];
-				const referredSchepe = tablesMeta[fldDefn.type];
-				if (!referredSchepe) {
-					throw new Error(`${tbl}.${fld} is an array type of "${fldDefn.type}" that cannot be resolved. \n${JSON.stringify(fldDefn, null, "  ")}`);
-				}
-				fldDefn.type = referredSchepe.id;
-			}
+			fieldsMeta.push(Merge({}, fieldDefaults, fldDefn, { name, schepe, id: ids[i] }));		
 		}
 	}
 
-	return {
-		schepes: Object.values(tablesMeta),
-		fields: fieldsMeta
-	};
+	const schepes = Object.values(tablesMeta);
+	const fields = fieldsMeta;
+
+	
+	// prepare the base methods for each schepe
+	schepes.forEach(schepe => {
+		const baseFields = fields.filter(field => !field.relationTable && field.schepe == schepe.id);
+		const relationFields = fields.filter(field => field.relationTable && field.schepe == schepe.id);
+
+		const baseRecord = baseFields.reduce((obj, field) => {
+			obj[field.name] = field.pathInInput ? field.pathInInput : field.name;
+			return obj;
+		}, {});
+
+		schepe.insertOne = JSON.stringify(knex(schepe.name).insert(baseRecord).toSQL().toNative());
+	});
+
+	return { schepes, fields };
 }
 
 class MetaBase {
@@ -166,22 +203,22 @@ class MetaBase {
 		const { strUp, strDown, normalizedTables } = generateMigrationStrings(tables, false);
 		const cborNormTables = CBOR.encode(normalizedTables);
 		const id = MetaBase._getHash(cborNormTables);
-		
-		const { schepes, fields } = prepareMetadata(normalizedTables);
-		const collections = generateCollections(knex, schepes, fields, normalizedTables);
-		// console.log("collections: ", collections);
-		// console.log("strUp: ", strUp);
-		// console.log("strDown: ", strDown);
-		// console.log("schepes: ", JSON.stringify(schepes, null, "  "));
-		// console.log("fields: ", JSON.stringify(fields, null, "  "));		
 
+		// quick test - remove this afterwards
+		// const { schepes, fields } = prepareMetadata(knex, normalizedTables);
+		// console.log("schepes: ", schepes, "\n fields:", fields); return Promise.resolve(1);
+		// const collections = generateCollections(knex, schepes, fields, normalizedTables);
+		// return Promise.resolve(0);
+		
 		return this.db.select("id").from("migrations").where({ id }).limit(1).then(result => {
 			if (result && result.length >= 1) return result[0]; // avoid duplicates
 
-			const { schepes, fields } = prepareMetadata(normalizedTables);
+			const { schepes, fields } = prepareMetadata(knex, normalizedTables);
 			const migStr = `up = knex => { ${strUp}	},	down = knex => {	${strDown} }`;
 			const context = { up: null, down: null };
 			const migModule = strToMigrationModule(migStr, context); // convert to callable module
+
+			const collections = generateCollections(knex, schepes, fields, normalizedTables);
 
 			return this.db.transaction(trx => {
 				// save the migration scripts, and meta data first

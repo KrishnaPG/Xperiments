@@ -2,7 +2,7 @@ const Knex = require('knex');
 const MetaBase = require('./meta');
 
 const { tables } = require('./schemas');
-const { callOnCollection } = require('./collectionAPI');
+const Collection = require('./collectionAPI');
 
 
 MetaBase.init().then(metaBase => {
@@ -16,12 +16,13 @@ MetaBase.init().then(metaBase => {
 
 	return metaBase.runMigration(knex, tables)
 		.then(record => { if (record) console.log("Migration skipped, record already exists: ", record); })
-		.catch(ex => console.error(`Failure: `, typeof ex === "string" ? ex : ex.message))
 		.then(() => {
-			return callOnCollection(metaBase.db, knex, "customer", "insertOne", require('./data').customer);
+			const c = new Collection(metaBase.db, knex);
+			return c.invokeMethod("customer", "insertOne", require('./data').customer);
 		})
+		.catch(console.error)
 		.finally(() => {
 			knex.destroy();
 			metaBase.close();
 		});
-}).catch(ex => console.error(ex));
+}).catch(console.error);

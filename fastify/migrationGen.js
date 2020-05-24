@@ -1,6 +1,7 @@
 
 const ObjectPath = require('object-path');
 const { builtIns, $extends } = require('./schemaUtils');
+const { DepGraph } = require('dependency-graph');
 
 const builtInFieldTypes = {
 	"boolean": true,
@@ -169,6 +170,9 @@ function normalizePendingTables(tables) {
 }
 
 function normalizePendingRelations(pendingRelations, normTables) {
+	const g = new DepGraph();
+	Object.keys(normTables).forEach(tbl => g.addNode(tbl));
+
 	for (let [tbl, tblDefn] of Object.entries(pendingRelations)) {
 		for (let [fld, fldDefn] of Object.entries(tblDefn)) {
 			// add default id if no col is specified for the foreign key table
@@ -185,16 +189,20 @@ function normalizePendingRelations(pendingRelations, normTables) {
 			delete fldType.unique;
 			delete fldType.default;
 			delete fldType.primaryKey;
+			const foreignKeyTable = fldDefn.foreignKey.split('.')[0];
 			// set type of array meta fields to be the referred table
 			if (fldDefn.isArray && fldDefn.relationTable) {
 				fldType.isArray = true;
 				fldType.relationTable = fldDefn.relationTable;
-				fldType.type = fldDefn.foreignKey.split('.')[0];
-			}			
+				fldType.type = foreignKeyTable;
+			}
 			normTables[tbl][fld] = fldType;
+			// add dependency
+			g.addDependency(tbl, foreignKeyTable);
 		}
-	}
-	return normTables;
+	}	
+	// sort based on dependencies
+	return g.overallOrder().reduce((obj, tbl) => { obj[tbl] = normTables[tbl]; return obj; }, {});
 }
 
 function normalizeTables(tables) {
