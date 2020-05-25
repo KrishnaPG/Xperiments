@@ -10,6 +10,7 @@ const { builtIns, $extends } = require('./schemaUtils');
 const { runScript: strToMigrationModule } = require('./runScript');
 const { generateCollections } = require('./collectionGen');
 const { getSequentialIds } = require('./utils');
+const CollectionGen = require('./collectionGen');
 
 // Notes:
 // 	normalizedTables: user given tables + derived relation tables, each with normalized type definitions
@@ -26,7 +27,7 @@ const meta = {
 		baseFields: "jsonb",			// field names array
 		fkFields: "jsonb",				// field names array
 		relationFields: "jsonb",	// field names array 
-		insertOne: "jsonb",				// query for base field insertion (does not tackle relation fields)
+		baseInsert: "jsonb",				// query for base field insertion (does not tackle relation fields)
 	}),
 	fields: $extends(builtIns.idCol, builtIns.trackModify, {
 		name: { type: "string", index: true, nullable: false, max: 64 },	// can have long nested fields
@@ -69,6 +70,10 @@ function getTableNameFromForeignKey(foreignKey) {
 	return foreignKey.split(".", 1)[0];
 }
 
+function isBaseField(field) {
+	return !field.foreignKey && !field.relationTable;
+}
+
 function prepareMetadata(knex, normalizedTables) {
 	const tablesMeta = {};
 	const fieldsMeta = [];
@@ -86,17 +91,18 @@ function prepareMetadata(knex, normalizedTables) {
 		// extract all fields into their categories
 		const { baseFields, fkFields, relationFields } = fieldNames.reduce((acc, fld) => {
 			const field = tblDefn[fld];
+			const fieldPath = field.pathInInput || fld;
 			if (field.isArray && field.relationTable)
-				acc.relationFields.push(fld);
+				acc.relationFields[fieldPath] = field;
 			if (field.foreignKey)
-				acc.fkFields.push(fld);
-			if (!field.foreignKey && !field.relationTable)
-				acc.baseFields.push(fld);
+				acc.fkFields[fieldPath] = field;
+			if (isBaseField(field))
+				acc.baseFields.push(fieldPath);
 			return acc;
-		}, { baseFields: [], fkFields: [], relationFields: [] });
+		}, { baseFields: [], fkFields: {}, relationFields: {} });
 
 		// convert all foreignKeys to point to their schepe IDs
-		fkFields.forEach(fld => { 
+		Object.keys(fkFields).forEach(fld => { 
 			const fldDefn = tblDefn[fld];
 			const referredTable = getTableNameFromForeignKey(fldDefn.foreignKey);
 			const referredSchepe = tablesMeta[referredTable];
@@ -138,19 +144,17 @@ function prepareMetadata(knex, normalizedTables) {
 
 	const schepes = Object.values(tablesMeta);
 	const fields = fieldsMeta;
-
 	
 	// prepare the base methods for each schepe
 	schepes.forEach(schepe => {
-		const baseFields = fields.filter(field => !field.relationTable && field.schepe == schepe.id);
-		const relationFields = fields.filter(field => field.relationTable && field.schepe == schepe.id);
+		const baseFields = fields.filter(field => field.schepe == schepe.id && isBaseField(field));
 
 		const baseRecord = baseFields.reduce((obj, field) => {
-			obj[field.name] = field.pathInInput ? field.pathInInput : field.name;
+			obj[field.name] = field.pathInInput || field.name;
 			return obj;
 		}, {});
 
-		schepe.insertOne = JSON.stringify(knex(schepe.name).insert(baseRecord).toSQL().toNative());
+		schepe.baseInsert = JSON.stringify(knex(schepe.name).insert(baseRecord).toSQL().toNative());
 	});
 
 	return { schepes, fields };
@@ -218,7 +222,8 @@ class MetaBase {
 			const context = { up: null, down: null };
 			const migModule = strToMigrationModule(migStr, context); // convert to callable module
 
-			const collections = generateCollections(knex, schepes, fields, normalizedTables);
+			const cGen = new CollectionGen(this.db, knex);
+			const collections = cGen.generateCollections(schepes, fields, normalizedTables);
 
 			return this.db.transaction(trx => {
 				// save the migration scripts, and meta data first
