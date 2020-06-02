@@ -17,5 +17,8 @@
     "express-formidable": "^1.2.0",
     "sequelize": "^5.21.7",
     "sqlite3": "^4.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "2.0.4"
   }
 }

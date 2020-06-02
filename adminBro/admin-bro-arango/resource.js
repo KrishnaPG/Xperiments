@@ -11,6 +11,9 @@ class Resource extends BaseResource {
 		super(model);
 		this.dbType = 'ArangoDB';
 		this.model = model;
+		// add id field for every schema, if it does not exist
+		if (!this.model.schema[Property.idField])
+			this.model.schema[Property.idField] = { type: "string", unique: true, nullable: false, max: 48, primaryKey: true };
 	}
 
 	databaseName() {
