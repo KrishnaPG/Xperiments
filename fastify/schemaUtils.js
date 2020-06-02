@@ -18,9 +18,11 @@ const autoInc = Object.freeze({
 });
 const idCol = Object.freeze({
 	id: unique_pk(),
+	mtlId: { type: "string", max: 48, index: true, nullable: true }
 });
 const idHashCol = Object.freeze({
-	id: { type: "string", max: 48, primaryKey: true, index: true, unique: true, nullable: false }
+	id: { type: "string", max: 48, primaryKey: true, index: true, unique: true, nullable: false },
+	mtlId: { type: "string", max: 48, index: true, nullable: true }
 });
 const trackModify = Object.freeze({
 	createdAt: "dateTime",

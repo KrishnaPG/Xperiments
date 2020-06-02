@@ -26,32 +26,32 @@ class MigrationStrings {
 
 	static isRelationTable = isRelationTable;
 
-	static getId(tables, isNormalized, mtlId) {
+	static getId(tables, isNormalized, rayId = "0x") {
 		const normalizedTables = isNormalized ? tables : normalizeTables(tables);
 		const cborNormTables = CBOR.encode(normalizedTables);
 		const id = MigrationStrings._getHash(cborNormTables);
 		return {
 			id,	// same tables give same id always
-			shortId: MigrationStrings._getShortHash(id, mtlId),	// same tables give different shortIds for different mtlIds
+			shortId: MigrationStrings._getShortHash(id, rayId),	// same tables give different shortIds for different rayIds
 			cborNormTables,
 			normalizedTables,
-			mtlId
+			rayId
 		};
 	}
-	static init(tables, mtlId = "0x") {
-		return new MigrationStrings(MigrationStrings.getId(tables, false, mtlId), mtlId);
+	static init(tables, rayId) {
+		return new MigrationStrings(MigrationStrings.getId(tables, false, rayId));
 	}
 
-	constructor({ shortId, normalizedTables, mtlId }) {
+	constructor({ shortId, normalizedTables, rayId }) {
 		this.normalizedTables = normalizedTables;
-		this.migId = shortId;	// migration id calculated based on tables and mtlId; same tables will have different migId for different users (based on mtlId);
-		this.mtlId = mtlId | "0x";	// multi-tenancy lookup id
+		this.migId = shortId;	// migration id calculated based on tables and rayId; same tables will have different migId for different users (based on rayId);
+		this.rayId = rayId;	// multi-tenancy lookup id
 	}
 	generate() {
 		let strUp = `async (db) => {`;
 		let strDown = `async (db) => {`;
 		
-		const gphName = `mig-${this.migId}-${this.mtlId}`;
+		const gphName = `mig-${this.migId}-${this.rayId}`;
 		strDown += `
 		\n const dropColl = name => { const coll = db.collection(name); return coll.exists().then(exists => exists ? coll.drop() : null); };
 		\n const p = [];\n const g = db.graph("${gphName}");

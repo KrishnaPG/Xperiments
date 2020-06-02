@@ -32,8 +32,8 @@ function isObjectNotEmpty(obj) {
 
 function addNewTable(newTableName, tbl, fld, fldDefn, pendingTables) {
 	if (!pendingTables[newTableName])
-		pendingTables[newTableName] = $extends(builtIns.idCol);
-	pendingTables[newTableName][tbl] = { type: "fk", foreignKey: `${tbl}.id` };
+		pendingTables[newTableName] = {};
+	pendingTables[newTableName][tbl] = { type: "fk", foreignKey: `${tbl}` };
 	pendingTables[newTableName][fld] = fldDefn[0];
 }
 
@@ -178,28 +178,23 @@ function normalizePendingRelations(pendingRelations, normTables) {
 			if (fldDefn.foreignKey.lastIndexOf('.') == -1)
 				fldDefn.foreignKey += ".id";
 			
+			const foreignKeyTable = fldDefn.foreignKey.split('.')[0];			
+			
 				// get the type definition of the referred foreign key
-			const referredTypeDefn = ObjectPath.get(normTables, fldDefn.foreignKey);
-			if (!referredTypeDefn || !referredTypeDefn.type || !builtInFieldTypes[referredTypeDefn.type])
+			const referredTypeDefn = normTables[foreignKeyTable];
+			if (!referredTypeDefn)
 				throw new Error(`${tbl}.${fld} Invalid foreign key reference: ${fldDefn.foreignKey}`);
 			if (referredTypeDefn.foreignKey)
 				throw new Error(`${tbl}.${fld} is a foreign key pointing to another foreign key: ${referredTypeDefn.foreignKey}`);
 			
-			const fldType = $extends(referredTypeDefn, { foreignKey: fldDefn.foreignKey });
-			delete fldType.nullable;
-			delete fldType.unique;
-			delete fldType.default;
-			delete fldType.primaryKey;
+			const fldType = { type: foreignKeyTable, foreignKey: fldDefn.foreignKey.replace(foreignKeyTable, '') };
 			
-			const foreignKeyTable = fldDefn.foreignKey.split('.')[0];
 			// set type of array meta fields to be the referred table
 			if (fldDefn.isArray && fldDefn.relationTable) {
 				fldType.isArray = true;
 				fldType.relationTable = fldDefn.relationTable;
 			}
-			fldType.type = foreignKeyTable;
-			fldType.foreignKey = fldType.foreignKey.replace(foreignKeyTable, ''); // points to the specific path inside the remote object
-
+			
 			normTables[tbl][fld] = fldType;
 			// add dependency
 			g.addDependency(tbl, foreignKeyTable);
