@@ -1,13 +1,17 @@
 const { BaseProperty } = require('admin-bro')
 
 class Property extends BaseProperty {
-	static idField = "_id";
+	static idField = "_key";
 
 	constructor(fld, fldDefn) {
-		super({ path: fld, type: fldDefn.type, isId: fld == Property.idField, isSortable: (fldDefn.index || fldDefn.unique) });
+		super({
+			path: fld,
+			isId: fld === Property.idField,
+			type: fldDefn.foreignKey ? 'reference' : fldDefn.type,
+			isSortable: (fldDefn.index || fldDefn.unique)
+		});
+		this.bEditable = fld[0] !== "_"; // does not start with _
 		this.fldDefn = fldDefn;
-		this.bVisible = fld[0] !== "_";
-		console.log(`${fld}: `, this.bVisible);
 	}
 	
 	availableValues() {
@@ -23,14 +27,14 @@ class Property extends BaseProperty {
 	}
 
 	isEditable() {
-		return this.bVisible;
+		return this.bEditable;
 	}
 
 	isRequired() {
 		return !this.fldDefn.nullable;
 	}
 	reference() {
-		return this.fldDefn.foreignKey ? `FjZkrENgbEz-${this.fldDefn.type}` : null;
+		return this.fldDefn.foreignKey ? this.fldDefn.type : null;
 	}
 }
 
