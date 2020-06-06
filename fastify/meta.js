@@ -98,7 +98,7 @@ class MetaBase {
 			if (!exists) {
 				const mig = MigrationStrings.getId(meta);
 				mig.shortId = "meta";
-				const { migModule } = MetaBase.getMigModule(mig);
+				const { migModule } = MetaBase.getMigModule(mig); 
 				return migModule.up(metaDB);
 			}
 			return true;

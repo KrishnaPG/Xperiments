@@ -15,7 +15,9 @@ const builtInFieldTypes = {
 	"uuid": true
 };
 const extendedFieldTypes = {
-	"code": { type: "text", format: "code", nullable: true }
+	"code": { type: "text", format: "code", nullable: true },
+	"geoPoint": true,
+	"geoJSON": true
 	// "increments": true // may endup being used as foreign key reference type
 };
 const supportedFieldTypes = Object.assign({}, builtInFieldTypes, extendedFieldTypes);
@@ -84,7 +86,7 @@ function normalizeFieldDefn(tbl, fld, fldDefn, pendingTables, isArrayAllowed = t
 				return fldDefn(fld, tbl);
 			}
 			case "string": {
-				if (!builtInFieldTypes[fldDefn]) {
+				if (!supportedFieldTypes[fldDefn]) {
 					return { type: "fk", foreignKey: fldDefn };
 				}
 				else
@@ -221,6 +223,7 @@ function normalizeTables(tables) {
 module.exports = {
 	normalizeTables,
 	isRelationTable: (name) => RelationTableNameRegEx.exec(name),
+	isGeoType: type => (type == "geoPoint" || type == "geoJSON"),
 
 	builtInFieldTypes,
 	extendedFieldTypes,

@@ -45,7 +45,7 @@ const tables = {
 		"street": "string",
 		"map": {
 			"geo": {
-				"location": latLong
+				"location": { type: "geoPoint", index: true }
 			}
 		}
 	}
