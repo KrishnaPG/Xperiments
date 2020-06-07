@@ -19,7 +19,7 @@ class Property extends BaseProperty {
 	}
 
 	// isVisible() {
-	// 	return this.bVisible;
+	// 	return {};//this.bVisible;
 	// }
 
 	isArray() {

@@ -115,7 +115,7 @@ class Resource extends BaseResource {
 	}
 
 	findMany(ids) {
-		return this.$coll.lookupByKeys(ids);
+		return this.$coll.lookupByKeys(ids).then(records => records.map(record => new BaseRecord(record, this)));
 	}
 
 	findById(id) {
