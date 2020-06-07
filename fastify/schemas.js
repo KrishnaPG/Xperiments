@@ -7,7 +7,7 @@ const { builtIns, $extends } = require('./schemaUtils');
 // Attributes such as createdAt, modifiedAt may also need not be specified at the
 // schema level. Rather they should be tracked separately in a log database.
 
-const latLong = () => ({
+const latLongFn = () => ({
 	name: "latLong",
 	type: "object",
 	properties: {
@@ -19,6 +19,7 @@ const latLong = () => ({
 		toString: (obj) => `${obj.lat},${obj.long}`
 	}
 });
+const latLong = { type: "geoPoint", index: true };
 
 const tables = {
 	"customer": $extends(builtIns.namedEntity, {
@@ -28,24 +29,32 @@ const tables = {
 	"serviceOffered": {
 		offeredBy: builtIns.fk("customer", "ManyToOne"),
 		location: latLong,
-		tags: [builtIns.fk("tag.name", "ManyToMany")]
+		tags: [builtIns.fk("tag.name", "ManyToMany")],
+		description: "richText",
+		hourlyRate: "float"
 	},
 	"serviceRequested": $extends(builtIns.timeBound, {
 		requestedBy: builtIns.fk("customer", "ManyToOne"),
-		tags: [builtIns.fk("tag.name", "ManyToMany")]
+		tags: [builtIns.fk("tag.name", "ManyToMany")],
+		description: "richText",
+		hourlyRate: "float"
 	}),
 	"tag": {
 		name: builtIns.unique_pk("string")
 	},
 	"post": $extends(builtIns.trackModify, {
 		"author": builtIns.fk("customer"),
-		"keywords": ["string"]
+		"keywords": ["string"],
+		"content": "richText"
 	}),
 	"address": {
+		"type": { type: "enum", values: ["Home", "Office"] },
 		"street": "string",
+		"city": "string",
+		"country": "string",
 		"map": {
 			"geo": {
-				"location": { type: "geoPoint", index: true }
+				"location": latLong
 			}
 		}
 	}

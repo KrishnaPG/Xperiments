@@ -1,5 +1,7 @@
 const AdminBro = require('admin-bro');
 const AdminBroExpress = require('admin-bro-expressjs');
+const ArangoJS = require('arangojs');
+const Merge = require('lodash.merge');
 
 const AdminBroArango = require('./admin-bro-arango');
 AdminBro.registerAdapter(AdminBroArango);
@@ -7,7 +9,6 @@ AdminBro.registerAdapter(AdminBroArango);
 const express = require('express');
 const app = express();
 
-const ArangoJS = require('arangojs');
 const db = new ArangoJS.Database({ url: "http://localhost:8529" });
 db.useDatabase("default");
 
@@ -16,25 +17,28 @@ const contentParent = {
   icon: 'Accessibility',
 };
 
+const CustomDateComponent = { components: { edit: AdminBro.bundle('./components/test-component') } };
+
 const schColl = db.collection("meta-schepes");
 schColl.all().then(cursor => cursor.all()).then(docs => {
-  // add database accessor. Each of these docs will be sent 
-  // as `model` param to the resource constructor
-  const resources = docs.map(doc => {
-    doc.$db = db;
+  // Each of these docs will be sent as `model` param to the resource constructor
+  const resources = docs.map(schepe => {
+    // add database accessor.
+    schepe.$db = db;
+
+    // add custom overloads for few properties, if any
+    const properties = {};
+    for (let [fld, fldDefn] of Object.entries(schepe.schema)) { 
+      if (fldDefn.type == "dateTime")
+        properties[fld] = Merge({}, properties[fld], CustomDateComponent);
+    }
+
     return {
-      resource: doc,
-      options: {
-        parent: contentParent,
-        properties: {
-          street: {
-            components: {
-              edit: AdminBro.bundle('./components/test-component'),
-              list: AdminBro.bundle('./components/test-component'),
-            }
-          }
-        }
-      }
+      resource: schepe,
+      // options: {
+      //   parent: contentParent,
+      //   properties
+      // }
     };
   });
 
@@ -43,7 +47,7 @@ schColl.all().then(cursor => cursor.all()).then(docs => {
     resources,
     rootPath: '/admin',
     branding: {
-      companyName: 'Amazing c.o.',
+      companyName: 'Workplace c.o.',
       softwareBrothers: false
     },
     pages: {

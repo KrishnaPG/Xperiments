@@ -11,14 +11,14 @@ const builtInFieldTypes = {
 	"json": true,
 	"jsonb": true,
 	"string": true,
-	"text": true,
+	"text": true,	// multiline Text
 	"uuid": true
 };
 const extendedFieldTypes = {
 	"code": { type: "text", format: "code", nullable: true },
 	"geoPoint": true,
-	"geoJSON": true
-	// "increments": true // may endup being used as foreign key reference type
+	"geoJSON": true,
+	"richText": true	// wysiwig kind of text
 };
 const supportedFieldTypes = Object.assign({}, builtInFieldTypes, extendedFieldTypes);
 

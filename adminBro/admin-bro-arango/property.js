@@ -1,5 +1,16 @@
 const { BaseProperty } = require('admin-bro')
 
+const typeMappings = {
+	"dateTime": "datetime",
+	"text": "richtext",
+	"richText": "richtext"
+};
+function mapTypeToAdminBro(fldDefn) {
+	if (fldDefn.foreignKey) return 'reference';
+	const mappedType = typeMappings[fldDefn.type];
+	return mappedType ? mappedType : fldDefn.type;
+}
+
 class Property extends BaseProperty {
 	static idField = "_key";
 
@@ -7,7 +18,7 @@ class Property extends BaseProperty {
 		super({
 			path: fld,
 			isId: fld === Property.idField,
-			type: fldDefn.foreignKey ? 'reference' : fldDefn.type,
+			type: mapTypeToAdminBro(fldDefn),
 			isSortable: (fldDefn.index || fldDefn.unique)
 		});
 		this.bEditable = fld[0] !== "_"; // does not start with _
