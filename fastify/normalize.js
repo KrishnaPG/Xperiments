@@ -18,7 +18,8 @@ const extendedFieldTypes = {
 	"code": { type: "text", format: "code", nullable: true },
 	"geoPoint": true,
 	"geoJSON": true,
-	"richText": true	// wysiwig kind of text
+	"richText": true,	// wysiwig kind of text
+	"url": "true"
 };
 const supportedFieldTypes = Object.assign({}, builtInFieldTypes, extendedFieldTypes);
 

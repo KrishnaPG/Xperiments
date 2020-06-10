@@ -27,17 +27,22 @@ const tables = {
 		addresses: ["address"]
 	}),
 	"serviceOffered": {
-		offeredBy: builtIns.fk("customer", "ManyToOne"),
+		title: "string",
+		description: "richText",		
+		hourlyRate: "float",
+		image: "url",
 		location: latLong,
-		tags: [builtIns.fk("tag.name", "ManyToMany")],
-		description: "richText",
-		hourlyRate: "float"
+		tags: ["string"],
+		offeredBy: builtIns.fk("customer", "ManyToOne")
 	},
 	"serviceRequested": $extends(builtIns.timeBound, {
-		requestedBy: builtIns.fk("customer", "ManyToOne"),
-		tags: [builtIns.fk("tag.name", "ManyToMany")],
+		title: "string",
 		description: "richText",
-		hourlyRate: "float"
+		hourlyRate: "float",
+		image: "url",
+		location: latLong,
+		tags: ["string"],
+		requestedBy: builtIns.fk("customer", "ManyToOne"),
 	}),
 	"tag": {
 		name: builtIns.unique_pk("string")

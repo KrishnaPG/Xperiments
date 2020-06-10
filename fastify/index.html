@@ -1,0 +1,71 @@
+<html>
+	<head>
+		<style>
+			.entry { display: flex; }
+			.thumbnail{ width:100px; height:64px }
+			.details {
+				display: flex;
+				flex-direction: column;
+				padding: 8px;
+				margin-left: 8px;
+				margin-bottom: 32px;
+				background-color: #8bc34a21;}
+			.details > h2 { margin: 0px; }
+			.details > .desc { max-height: 48px; overflow-y: hidden; }
+		</style>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
+	
+		<script id="entry-template" type="text/x-handlebars-template">
+			<h1>Service Requests</h1>
+			{{#each records}}
+				<div class="entry">
+					<img src="{{image}}" class="thumbnail"/>
+					<div class="details">
+						<h2>{{title}}</h2>
+						<div class="desc">{{{description}}}</div>
+					</div>
+				</div>
+			{{/each}}
+
+		</script>
+	
+		<script src="wsClient.js"></script>
+		<script>
+			Handlebars.registerHelper('trim', function (aString) {
+				return new Handlebars.SafeString(aString.slice(0, 128));
+			})
+
+			const source = document.getElementById("entry-template").innerHTML;
+			const template = Handlebars.compile(source);
+			
+			const ws = new WebSocket('ws://127.0.0.1:3000/schepes');
+			ws.addEventListener('open', function open() {
+				const coll = new Collection(ws, "z8q1tEzDqq7F", "serviceRequested");
+
+				console.log("socket opened");
+				ws.send('something');
+				//coll.findOne({ "_key": "352429" });
+				coll.find();
+			});
+
+			ws.addEventListener('message', ({ data }) => {
+				try {
+					const res = JSON.parse(data);
+					console.log("received, ", res);
+					const records = res.result;
+
+					const html = template({records});
+					document.getElementById("app").innerHTML = html;
+				} catch (ex) { console.error(ex); }
+			});
+
+
+
+		</script>
+	</body>
+
+</html>
+
