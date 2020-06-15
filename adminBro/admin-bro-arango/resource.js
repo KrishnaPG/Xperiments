@@ -124,16 +124,25 @@ class Resource extends BaseResource {
 
 	create(params) {
 		const parsedParams = this.parseParams(params);
-		return this.$coll.save(parsedParams);
+		return this.$coll.save(parsedParams).then(result => {
+			this.model.$db.notifyChange({ op: 'Create', result });
+			return result;
+		});
 	}	
 
 	update(id, params) {
 		const parsedParams = this.parseParams(params);
-		return this.$coll.update({ [Property.idField]: id }, parsedParams);
+		return this.$coll.update({ [Property.idField]: id }, parsedParams).then(result => {
+			this.model.$db.notifyChange({ op: 'Update', result });
+			return result;
+		});
 	}
 
 	delete(id) {
-		return this.$coll.remove({ [Property.idField]: id });
+		return this.$coll.remove({ [Property.idField]: id }).then(result => {
+			this.model.$db.notifyChange({ op: 'Delete', result });
+			return result;
+		});
 	}	
 
   /**

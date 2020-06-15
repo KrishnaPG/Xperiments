@@ -21,7 +21,37 @@ const latLongFn = () => ({
 });
 const latLong = { type: "geoPoint", index: true };
 
+const users = {
+	email: { type: "string", unique: true, primaryKey: true, nullable: false },
+	password: "string",
+	passwordResetToken: "string",
+	passwordResetExpires: "dateTime",
+	emailVerificationToken: "string",
+	emailVerified: "boolean",
+
+	snapchat: "string",
+	facebook: "string",
+	twitter: "string",
+	google: "string",
+	github: "string",
+	instagram: "string",
+	linkedin: "string",
+	steam: "string",
+	twitch: "string",
+	quickbooks: "string",
+	tokens: ["string"],
+
+	profile: {
+		name: "string",
+		gender: "string",
+		location: "string",
+		website: "string",
+		picture: "string"
+	}
+};
+
 const tables = {
+	users,
 	"customer": $extends(builtIns.namedEntity, {
 		role: { type: "enum", values: ["provider", "consumer"] },
 		addresses: ["address"]

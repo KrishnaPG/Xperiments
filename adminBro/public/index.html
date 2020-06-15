@@ -126,7 +126,7 @@
 					<p class="lead text-muted">Something short and leading about the collection below—its contents, the creator,
 						etc. Make it short and sweet, but not too short so folks don't simply skip over it entirely.</p>
 					<p>
-						<a href="#" class="btn btn-primary my-2">Main call to action</a>
+						<a href="/admin" class="btn btn-primary my-2">Main call to action</a>
 						<a href="#" class="btn btn-secondary my-2">Secondary action</a>
 					</p>
 				</div>
@@ -199,9 +199,9 @@
 			const source = document.getElementById("entry-template").innerHTML;
 			const template = Handlebars.compile(source);
 			
-			const ws = new WebSocket('ws://127.0.0.1:3000/schepes');
+			const ws = new WebSocket('ws://127.0.0.1:8080/schepes');
 			ws.addEventListener('open', function open() {
-				const coll = new Collection(ws, "z8q1tEzDqq7F", "serviceRequested");
+				const coll = new Collection(ws, "YsBCQ8hJca8", "serviceRequested");
 
 				console.log("socket opened");
 				ws.send('something');

@@ -3,7 +3,7 @@ import { Box } from 'admin-bro'
 
 const Dashboard = (props) => {
 	return (
-		<Box>My custom dashboard</Box>
+		<Box>My custom dashboard {props} </Box>
 	)
 }
 

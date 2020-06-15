@@ -1,0 +1,16 @@
+{
+  "logger": {
+    "pino": {
+      "level": "info"
+    }
+  },
+  "passport": {
+    "local": {
+      "usernameField": "email",
+      "passwordField": "password"
+    }
+  },
+  "ws": {
+    "maxPayload": 4194304
+  }
+}
