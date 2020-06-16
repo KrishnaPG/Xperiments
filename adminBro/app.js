@@ -43,10 +43,7 @@ app.use(session(Object.assign({}, {
 	saveUninitialized: false,
 	secret: process.env.SESSION_SECRET || (Math.random() * Date.now()).toString("36"),
 	cookie: { maxAge: 1209600000 }, // two weeks in milliseconds
-	// store: new MongoStore({
-	// 	url: process.env.MONGODB_URI,
-	// 	autoReconnect: true,
-	// })
+	// store: new MongoStore({})
 }, config.session)));
 app.use(passport.initialize());
 app.use(passport.session());
@@ -55,6 +52,24 @@ app.use(flash());
 // Host the public folder
 app.use('/', express.static(path.resolve(__dirname, './public'), { maxAge: 31557600000 }));	// 1 year maxAge
 
+app.use((req, res, next) => {
+	res.locals.user = req.user;
+	next();
+});
+app.use((req, res, next) => {
+	// After successful login, redirect back to the intended page
+	if (!req.user
+		&& req.path !== '/login'
+		&& req.path !== '/signup'
+		&& !req.path.match(/^\/auth/)
+		&& !req.path.match(/\./)) {
+		req.session.returnTo = req.originalUrl;
+	} else if (req.user
+		&& (req.path === '/account' || req.path.match(/^\/api/))) {
+		req.session.returnTo = req.originalUrl;
+	}
+	next();
+});
 
 /**
  * Primary app routes.

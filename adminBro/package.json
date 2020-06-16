@@ -19,6 +19,8 @@
     "bcrypt": "^5.0.0",
     "compression": "^1.7.4",
     "config": "^3.3.1",
+    "connect-arangodb-session": "^0.2.0-alpha1",
+    "connect-mongo": "^3.2.0",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "errorhandler": "^1.5.1",

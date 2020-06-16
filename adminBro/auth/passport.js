@@ -20,7 +20,7 @@ const moment = require('moment');
 const User = require('../models/User');
 
 passport.serializeUser((user, done) => {
-  done(null, user.id);
+  done(null, user[config.db.idField]);
 });
 
 passport.deserializeUser((id, done) => {
