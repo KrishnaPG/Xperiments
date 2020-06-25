@@ -39,10 +39,10 @@ if (process.env.NODE_ENV === "development") app.use(pinoEx); // logger
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session(Object.assign({}, {
-	resave: false,
-	saveUninitialized: false,
+	resave: false,	// do not save unless modified
+	saveUninitialized: false,	// do not create until something stored
 	secret: process.env.SESSION_SECRET || (Math.random() * Date.now()).toString("36"),
-	cookie: { maxAge: 1209600000 }, // two weeks in milliseconds
+	cookie: { maxAge: 1209600000, sameSite: 'none', secure: false }, // two weeks in milliseconds
 	// store: new MongoStore({})
 }, config.session)));
 app.use(passport.initialize());
@@ -112,11 +112,11 @@ app.get('/auth/facebook/callback', passport.authenticate('facebook', { failureRe
 });
 app.get('/auth/github', passport.authenticate('github'));
 app.get('/auth/github/callback', passport.authenticate('github', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/');
+	res.redirect(req.session.returnTo || '/account');
 });
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email' /*, 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets.readonly' */], accessType: 'offline', prompt: 'consent' }));
 app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/');
+	res.redirect(req.session.returnTo || '/account');
 });
 app.get('/auth/twitter', passport.authenticate('twitter'));
 app.get('/auth/twitter/callback', passport.authenticate('twitter', { failureRedirect: '/login' }), (req, res) => {
@@ -129,6 +129,50 @@ app.get('/auth/linkedin/callback', passport.authenticate('linkedin', { failureRe
 app.get('/auth/twitch', passport.authenticate('twitch', {}));
 app.get('/auth/twitch/callback', passport.authenticate('twitch', { failureRedirect: '/login' }), (req, res) => {
 	res.redirect(req.session.returnTo || '/');
+});
+
+app.get('/oAuth/google', (req, res, next) => {
+	req.session.returnTo = req.headers.referer;	//TODO: use params from query to redirect
+	req.session.failureRedirect = req.headers.referer; // TODO: handle failure redirects !!
+	next();
+}, passport.authenticate('google', { scope: ['profile', 'email'], accessType: 'offline', prompt: 'consent' }) // leads to the callback call above
+);
+
+/**
+ * Creates a RegExp from the given string, converting asterisks to .* expressions,
+ * and escaping all other characters.
+ */
+function wildcardToRegExp(s) {
+	return new RegExp('^' + s.split(/\*+/).map(regExpEscape).join('.*') + '$');
+}
+/**
+ * RegExp-escapes all characters in the given string.
+ */
+function regExpEscape(s) {
+	return s.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
+}
+const AllowedOrigins = config.cors.allowedOrigins.map(el => wildcardToRegExp(el)); // pre-bake to regExps
+
+app.get('/api/user', (req, res, next) => {
+	const allowed = AllowedOrigins.some(regEx => req.headers.origin.match(regEx));
+	if (!allowed) return res.sendStatus(403);	
+	res.header('Access-Control-Allow-Origin', req.headers.origin);
+	res.header('Access-Control-Allow-Credentials', true);
+	res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');	
+	req.isAuthenticated() ? res.send({ sessionID: req.sessionID, user: req.user }) : res.sendStatus(403);
+});
+app.get('/api/logout', (req, res, next) => {
+	const allowed = AllowedOrigins.some(regEx => req.headers.origin.match(regEx));
+	if (!allowed) return res.sendStatus(403);
+	res.header('Access-Control-Allow-Origin', req.headers.origin);
+	res.header('Access-Control-Allow-Credentials', true);
+	res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+	req.logout();
+	res.clearCookie(config.session.name);
+	req.session.destroy(err => {
+		req.user = null;
+		err ? res.send(err) : res.send({result: "success"});
+	});
 });
 
 /**

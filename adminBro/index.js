@@ -130,7 +130,7 @@ schColl.all().then(cursor => cursor.all()).then(docs => {
   });
   const router = AdminBroExpress.buildRouter(adminBro);
 
-  app.use(adminBro.options.rootPath, router);
+  //app.use(adminBro.options.rootPath, router);
   const server = app.listen(8080, () => console.log('AdminBro is under localhost:8080/admin'));
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
