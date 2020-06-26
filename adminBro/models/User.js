@@ -45,21 +45,24 @@ class User {
 			});
 		});
 	}
+	save(cb = (err, user) => { }) {
+		return saveUser(this, cb);
+	}
 };
 
+function saveUser(user, cb) {
+	return User.hashPassword(user)
+		.then(user => user._key ? gUserColl.update({ [config.db.idField]: user[config.db.idField] }, user) : gUserColl.save(user))
+		.then(_result => cb(null))
+		.catch(ex => cb(ex));
+}
+
 function makeInstance(user) {
-	user.save = function (cb = (err, user) => { }) {
-		return User.hashPassword(this)
-			.then(user => user._key ? gUserColl.update({ [config.db.idField]: user[config.db.idField] }, user) : gUserColl.save(user))
-			.then(_result => cb(null))
-			.catch(ex => cb(ex));
-	};
-	user.comparePassword = function (candidatePassword, cb) {
-		bcrypt.compare(candidatePassword, this.password, (err, isMatch) => {
-			cb(err, isMatch);
-		});
-	};
-	user.gravatar = function (size) {
+	user.save = function (cb = err => { }) { return saveUser(this, cb); }
+	user.comparePassword = function(candidatePassword, cb) {
+		bcrypt.compare(candidatePassword, this.password, cb);
+	}
+	user.gravatar = function(size) {
 		if (!size) {
 			size = 200;
 		}
@@ -68,7 +71,7 @@ function makeInstance(user) {
 		}
 		const md5 = crypto.createHash('md5').update(this.email).digest('hex');
 		return `https://gravatar.com/avatar/${md5}?s=${size}&d=retro`;
-	};
+	}
 	return user;
 }
 	

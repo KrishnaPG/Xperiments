@@ -30,10 +30,14 @@ exports.postLogin = (req, res, next) => {
   const validationErrors = [];
   if (!validator.isEmail(req.body.email)) validationErrors.push({ msg: 'Please enter a valid email address.' });
   if (validator.isEmpty(req.body.password)) validationErrors.push({ msg: 'Password cannot be blank.' });
+  
+  res.header('Access-Control-Allow-Origin', req.headers.origin);
+  res.header('Access-Control-Allow-Credentials', true);
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
 
   if (validationErrors.length) {
     req.flash('errors', validationErrors);
-    return res.redirect('/login');
+    return res.redirect(req.session.returnTo || '/login');
   }
   req.body.email = validator.normalizeEmail(req.body.email, { gmail_remove_dots: false });
 
@@ -41,7 +45,7 @@ exports.postLogin = (req, res, next) => {
     if (err) { return next(err); }
     if (!user) {
       req.flash('errors', info);
-      return res.redirect('/login');
+      return res.redirect(req.session.returnTo || '/login');
     }
     req.logIn(user, (err) => {
       if (err) { return next(err); }

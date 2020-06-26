@@ -131,11 +131,20 @@ app.get('/auth/twitch/callback', passport.authenticate('twitch', { failureRedire
 	res.redirect(req.session.returnTo || '/');
 });
 
-app.get('/oAuth/google', (req, res, next) => {
-	req.session.returnTo = req.headers.referer;	//TODO: use params from query to redirect
-	req.session.failureRedirect = req.headers.referer; // TODO: handle failure redirects !!
+app.get('/oauth/google', (req, res, next) => {
+	req.session.returnTo = req.headers.referer;
 	next();
-}, passport.authenticate('google', { scope: ['profile', 'email'], accessType: 'offline', prompt: 'consent' }) // leads to the callback call above
+}, passport.authenticate('google', { scope: ['profile', 'email'], accessType: 'offline', prompt: 'consent' }) // leads to the /auth/google/callback call above
+);
+app.get('/oauth/linkedin', (req, res, next) => {
+	req.session.returnTo = req.headers.referer;
+	next();
+}, passport.authenticate('linkedin', { state: 'SOME STATE' }) // leads to the /auth/linkedin/callback call above
+);
+app.get('/oauth/github', (req, res, next) => {
+	req.session.returnTo = req.headers.referer;
+	next();
+}, passport.authenticate('github') // leads to the /auth/github/callback call above
 );
 
 /**
@@ -174,6 +183,11 @@ app.get('/api/logout', (req, res, next) => {
 		err ? res.send(err) : res.send({result: "success"});
 	});
 });
+app.post('/api/login', (req, res, next) => {
+	req.session.returnTo = req.headers.referer;
+	next();
+}, userController.postLogin);
+
 
 /**
  * OAuth authorization routes. (API examples)

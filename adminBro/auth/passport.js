@@ -14,17 +14,17 @@ const { Strategy: OpenIDStrategy } = require('passport-openid');
 //const { Strategy: TwitchStrategy } = require('passport-twitch-new');
 const { OAuthStrategy } = require('passport-oauth');
 const { OAuth2Strategy } = require('passport-oauth');
-//const _ = require('lodash');
+const _ = require('lodash');
 const moment = require('moment');
 
 const User = require('../models/User');
 
 passport.serializeUser((user, done) => {
-  done(null, user[config.db.idField]);
+  done(null, user.email);
 });
 
-passport.deserializeUser((id, done) => {
-  User.findById(id, (err, user) => {
+passport.deserializeUser((email, done) => { //TODO: cache the users and avoid db call
+  User.findOne({email}, (err, user) => {
     done(err, user);
   });
 });
