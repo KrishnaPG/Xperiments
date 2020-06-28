@@ -24,6 +24,7 @@ const contactController = require('./controllers/contact');
 
 const express = require('express');
 const passportConfig = require('./auth/passport');
+const Utils = require('./auth/utils');
 
 const app = express();
 
@@ -95,57 +96,33 @@ app.post('/account/delete', passportConfig.isAuthenticated, userController.postD
 app.get('/account/unlink/:provider', passportConfig.isAuthenticated, userController.getOauthUnlink);
 
 
-/**
- * OAuth authentication routes. (Sign in)
- */
-app.get('/auth/instagram', passport.authenticate('instagram', { scope: ['basic', 'public_content'] }));
-app.get('/auth/instagram/callback', passport.authenticate('instagram', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/');
-});
-app.get('/auth/snapchat', passport.authenticate('snapchat'));
-app.get('/auth/snapchat/callback', passport.authenticate('snapchat', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/');
-});
-app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email', 'public_profile'] }));
-app.get('/auth/facebook/callback', passport.authenticate('facebook', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/');
-});
-app.get('/auth/github', passport.authenticate('github'));
-app.get('/auth/github/callback', passport.authenticate('github', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/account');
-});
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email' /*, 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets.readonly' */], accessType: 'offline', prompt: 'consent' }));
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/account');
-});
-app.get('/auth/twitter', passport.authenticate('twitter'));
-app.get('/auth/twitter/callback', passport.authenticate('twitter', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/');
-});
-app.get('/auth/linkedin', passport.authenticate('linkedin', { state: 'SOME STATE' }));
-app.get('/auth/linkedin/callback', passport.authenticate('linkedin', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/');
-});
-app.get('/auth/twitch', passport.authenticate('twitch', {}));
-app.get('/auth/twitch/callback', passport.authenticate('twitch', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo || '/');
-});
+function oAuthCallbackHandler(provider) {
+	return (req, res, next) => {
+		if (!req.session.returnTo) return next(new Error("Invalid session. Please try login again"));
+		// if (!req.session.remotePubKey) return next(new Error("Caller did not send any key"));
+		passport.authenticate(provider, (err, user, info) => {
+			if (err) { return next(err); }
+			if (user) { return res.redirect(req.session.returnTo + `#oAuthErr="Auth Failure"` || '/login'); }
+			req.logIn(user, function (err) {
+				if (err) { return next(err); }
+				// const token = Utils.createSealedBox({ s: req.session.id, e: req.session.cookie.expires }, req.session.remotePubKey);
+				return res.redirect(req.session.returnTo /*+ `#token=${token}`*/ || ('/users/' + user.username));
+			});
+		})(req, res, next);
+	}
+}
+function oAuthPreHandler(req, res, next) {
+	req.session.remotePubKey = req.query.pubKey;
+	req.session.returnTo = req.query.redirect || req.headers.referer;
+	next();
+}
 
-app.get('/oauth/google', (req, res, next) => {
-	req.session.returnTo = req.headers.referer;
-	next();
-}, passport.authenticate('google', { scope: ['profile', 'email'], accessType: 'offline', prompt: 'consent' }) // leads to the /auth/google/callback call above
-);
-app.get('/oauth/linkedin', (req, res, next) => {
-	req.session.returnTo = req.headers.referer;
-	next();
-}, passport.authenticate('linkedin', { state: 'SOME STATE' }) // leads to the /auth/linkedin/callback call above
-);
-app.get('/oauth/github', (req, res, next) => {
-	req.session.returnTo = req.headers.referer;
-	next();
-}, passport.authenticate('github') // leads to the /auth/github/callback call above
-);
+app.get('/auth/google', oAuthPreHandler, passport.authenticate('google', { scope: ['profile', 'email'], accessType: 'offline', prompt: 'consent' }));
+app.get('/auth/google/callback', oAuthCallbackHandler('google'));
+app.get('/auth/linkedin', oAuthPreHandler, passport.authenticate('linkedin', { state: 'SOME STATE' }));
+app.get('/auth/linkedin/callback', oAuthCallbackHandler('linkedin'));
+app.get('/auth/github', oAuthPreHandler, passport.authenticate('github'));
+app.get('/auth/github/callback', oAuthCallbackHandler('github'));
 
 /**
  * Creates a RegExp from the given string, converting asterisks to .* expressions,
@@ -187,31 +164,6 @@ app.post('/api/login', (req, res, next) => {
 	req.session.returnTo = req.headers.referer;
 	next();
 }, userController.postLogin);
-
-
-/**
- * OAuth authorization routes. (API examples)
- */
-app.get('/auth/foursquare', passport.authorize('foursquare'));
-app.get('/auth/foursquare/callback', passport.authorize('foursquare', { failureRedirect: '/api' }), (req, res) => {
-	res.redirect('/api/foursquare');
-});
-app.get('/auth/tumblr', passport.authorize('tumblr'));
-app.get('/auth/tumblr/callback', passport.authorize('tumblr', { failureRedirect: '/api' }), (req, res) => {
-	res.redirect('/api/tumblr');
-});
-app.get('/auth/steam', passport.authorize('openid', { state: 'SOME STATE' }));
-app.get('/auth/steam/callback', passport.authorize('openid', { failureRedirect: '/api' }), (req, res) => {
-	res.redirect(req.session.returnTo);
-});
-app.get('/auth/pinterest', passport.authorize('pinterest', { scope: 'read_public write_public' }));
-app.get('/auth/pinterest/callback', passport.authorize('pinterest', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect('/api/pinterest');
-});
-app.get('/auth/quickbooks', passport.authorize('quickbooks', { scope: ['com.intuit.quickbooks.accounting'], state: 'SOME STATE' }));
-app.get('/auth/quickbooks/callback', passport.authorize('quickbooks', { failureRedirect: '/login' }), (req, res) => {
-	res.redirect(req.session.returnTo);
-});
 
 
 /**

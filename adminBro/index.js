@@ -102,35 +102,35 @@ schColl.all().then(cursor => cursor.all()).then(docs => {
     };
   }); 
 
-  const adminBro = new AdminBro({
-    //databases: [db],
-    resources,
-    rootPath: '/admin',
-    branding: {
-      logo: 'https://i.imgur.com/DPVOTkw.png',
-      companyName: 'Bemizu',
-      softwareBrothers: false
-    },
-    pages: {
-      customPage: {
-        label: "Custom page",
-        handler: async (request, response, context) => {
-          return {
-            text: 'I am fetched from the backend',
-          }
-        },
-        component: AdminBro.bundle('./components/some-stats'),
-      },
-      anotherPage: {
-        label: "TypeScript page",
-        component: AdminBro.bundle('./components/some-stats'),
-      },
-    }    
-    //assets: { globalsFromCDN: false }
-  });
-  const router = AdminBroExpress.buildRouter(adminBro);
+  // const adminBro = new AdminBro({
+  //   //databases: [db],
+  //   resources,
+  //   rootPath: '/admin',
+  //   branding: {
+  //     logo: 'https://i.imgur.com/DPVOTkw.png',
+  //     companyName: 'Bemizu',
+  //     softwareBrothers: false
+  //   },
+  //   pages: {
+  //     customPage: {
+  //       label: "Custom page",
+  //       handler: async (request, response, context) => {
+  //         return {
+  //           text: 'I am fetched from the backend',
+  //         }
+  //       },
+  //       component: AdminBro.bundle('./components/some-stats'),
+  //     },
+  //     anotherPage: {
+  //       label: "TypeScript page",
+  //       component: AdminBro.bundle('./components/some-stats'),
+  //     },
+  //   }    
+  //   //assets: { globalsFromCDN: false }
+  // });
+  // const router = AdminBroExpress.buildRouter(adminBro);
 
-  //app.use(adminBro.options.rootPath, router);
+  // app.use(adminBro.options.rootPath, router);
   const server = app.listen(8080, () => console.log('AdminBro is under localhost:8080/admin'));
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
