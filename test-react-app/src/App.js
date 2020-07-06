@@ -1,7 +1,9 @@
 import React from 'react';
+import Axios from 'axios';
 import FlexLayout from 'flexlayout-react';
 //import { CreateForm } from 'sula';
 import CForm from './form';
+import LoginUI from './components/loginUI';
 
 import { registerFieldPlugins, registerRenderPlugins, registerActionPlugins, registerFilterPlugins, Icon } from 'sula';
 import { UserOutlined } from '@ant-design/icons';
@@ -53,9 +55,20 @@ class Main extends React.Component {
 
   constructor(props) {
     super(props);
-    this.state = { model: FlexLayout.Model.fromJson(json) };
+    this.state = {
+      model: FlexLayout.Model.fromJson(json),
+      user: null,
+      loginUI: {
+        isAuthInProgress: false,
+        errorMsg: null
+      }
+    };
   }
 
+  componentDidMount() { }
+  componentWillUnmount() { }
+
+  // the flexLayout tab UI factory
   factory = (node) => {
     var component = node.getComponent();
     if (component === "button") {
@@ -85,11 +98,28 @@ class Main extends React.Component {
   }
 
   render() {
-    return (
+    return this.state.user ? (
       <FlexLayout.Layout
         model={this.state.model}
         factory={this.factory} />
-    );
+    ) : (<LoginUI
+      uiState={this.state.loginUI}
+      onFormSubmit={this.onLoginFormSubmit}
+    ></LoginUI>);
+  }
+
+  onLoginFormSubmit = (formData) => {
+    this.setState({ loginUI: { isAuthInProgress: true, errorMsg: null } });
+    console.log("onLoginFormSubmit: ", formData);
+    return Axios.post('http://localhost:8080/api/login', formData)
+      .then(response => {
+        console.log("response: ", response);
+        this.setState({ user: "dingbat", loginUI: { isAuthInProgress: false, errorMsg: null } });
+      })
+      .catch(ex => {
+        console.log("login exception: ", ex);
+        this.setState({ user: null, loginUI: { isAuthInProgress: false, errorMsg: ex.message + " !!" } });
+      });
   }
 }
 
