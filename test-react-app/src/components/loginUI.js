@@ -1,7 +1,7 @@
 import React from 'react';
-import { Alert, Button, Form, Input, Row, Col, Spin } from 'antd';
-import { default as Icon, UserOutlined, LockOutlined } from '@ant-design/icons';
-import './loginUI.css';
+import { message as Message, Button, Form, Input, Row, Col, Spin } from 'antd';
+import { GoogleOutlined, LinkedinOutlined, GithubOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
+import './loginUI.scss';
 
 class LoginUI extends React.Component {
 
@@ -10,30 +10,28 @@ class LoginUI extends React.Component {
 		this.state = {
 			currentMode: "Login",
 			otherMode: "Signup",
-			validationErrorMsg: null,
 			storeLoaded: true, // for future in case LocalStorage is used
 			returnTo: encodeURI(window.location.origin + window.location.pathname + window.location.search) // remove the hash in the current url. 
 		};
+		// configure the error message display options
+		Message.config({ maxCount: 2, duration: 2 });
 	}
 
 	render() {
-		const isBusy = this.props.uiState.isAuthInProgress || !this.state.storeLoaded;
+		const isBusy = this.props.isAuthInProgress || !this.state.storeLoaded;
 		const busyMsg = this.state.storeLoaded ? "Verifying..." : "Initializing store...";
-		const errorMsg = this.props.uiState.errorMsg || this.state.validationErrorMsg;
-		let ErrorBox = null;
-		if (errorMsg) {
-			ErrorBox = <div className="error"> <Alert type="error" message={errorMsg} banner closable /> </div>;
-		}
+
 		let oAuthLinks = null;
 		if (this.state.currentMode === "Login") {
 			oAuthLinks =
 				<div className="icons-list">
 					<span>Login with:</span>
-					<a href={`http://localhost:8080/auth/google?redirect=${this.state.returnTo}`} title="Google"><Icon type="google" /></a>
-					<a href={`http://localhost:8080/auth/linkedin?redirect=${this.state.returnTo}`} title="LinkedIn"><Icon type="linkedin" /></a>
-					<a href={`http://localhost:8080/auth/github?redirect='${this.state.returnTo}'`} title="Github"><Icon type="github" /></a>
+					<a href={`http://localhost:8080/auth/linkedin?redirect=${this.state.returnTo}`} title="LinkedIn"><LinkedinOutlined className="oAuthIcon" /></a>
+					<a href={`http://localhost:8080/auth/google?redirect=${this.state.returnTo}`} title="Google"><GoogleOutlined className="oAuthIcon" /></a>
+					<a href={`http://localhost:8080/auth/github?redirect='${this.state.returnTo}'`} title="Github"><GithubOutlined className="oAuthIcon" /></a>
 				</div>
 		}
+
 		let RepeatPassword = null;
 		if (this.state.currentMode === 'Signup') {
 			RepeatPassword = <Form.Item
@@ -47,12 +45,12 @@ class LoginUI extends React.Component {
 				/>
 			</Form.Item>
 		}
+
 		return (
-			<Row type="flex" justify="center" align="middle" className="fullHeight">
+			<Row id="loginUI" type="flex" justify="center" align="middle" className="fullHeight">
 				<Col md={{ span: 12 }} lg={{ span: 5 }}>
 					<div className="logo"><span className="logo-lg"><b>Berg</b>10</span></div>
 					<Spin spinning={isBusy} tip={busyMsg} delay="250" size="large">
-						{ErrorBox}
 						<Form
 							id="loginForm"
 							className="login-form"
@@ -92,25 +90,23 @@ class LoginUI extends React.Component {
 					</Spin>
 				</Col>
 			</Row>
-
-
 		);
 	}
 
 	handleSubmit = (values) => {
 		// form must have done the basic validation. Lets do any additional validations
 		if (this.state.currentMode === "Signup" && values.password !== values.password1) {
-			this.setState({ validationErrorMsg: "Password was not repeated correctly" });
+			Message.warning("Password was not repeated correctly");
 			return;
 		}
-		// all validations succeeded
-		this.setState({ validationErrorMsg: null });
 		// on success hides the login UI (by setting the user in the state)
-		this.props.onFormSubmit({ strategy: 'local', email: values.email, password: values.password });
+		this.props.onFormSubmit({ strategy: 'local', email: values.email, password: values.password }).catch(ex => {
+			Message.warning(ex.message || ex);
+		});
 	}
 
 	onModeChange = (e) => {
-		console.log("onmode change, "); e.preventDefault();
+		e.preventDefault();
 		this.setState((state, _props) => ({ currentMode: state.otherMode, otherMode: state.currentMode }));
 		return false;
 	}
