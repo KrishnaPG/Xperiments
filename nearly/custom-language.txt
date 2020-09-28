@@ -1,0 +1,23 @@
+// all users with manager x
+u[@manager=='x'][@ctx=='']
+
+u-manager->2> == u-manager->u-manager->
+u-manager->>[@grade in ['vp', 'ceo'] ]
+
+u-manager->xwhile(@emp !in ['vp', 'ceo'])>
+u-manager->xuntil(@emp in ['vp, 'ceo'])>
+u-manager->2>
+
+u-manager->
+
+u-manager[@ctx=="ctx1"]->>[@grade in ['vp', 'ceo']]&& who has more than 2 reportees
+u-manager[@ctx=="ctx1"]->>[@grade in ['vp', 'ceo']]&& [count(.<<-manager-*) > 2]
+
+// all managers of u
+u-manager->*
+
+// all direct reportees of u
+u<-manager-*
+
+x = c<-created-[]
+x-knows->
