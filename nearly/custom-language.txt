@@ -6,7 +6,7 @@ u-manager->>[@grade in ['vp', 'ceo'] ]
 
 u-manager->xwhile(@emp !in ['vp', 'ceo'])>
 u-manager->xuntil(@emp in ['vp, 'ceo'])>
-u-manager->2>
+u-manager->2> //Note: may want the nodes on the path or just end result nodes 
 
 u-manager->
 
