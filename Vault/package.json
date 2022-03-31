@@ -15,7 +15,7 @@
     "@feathersjs/configuration": "^2.0.4",
     "@feathersjs/feathers": "^3.2.3",
     "@feathersjs/socketio-client": "^1.1.5",
-    "axios": "^0.18.0",
+    "axios": "^0.21.1",
     "socket.io-client": "^2.1.1",
     "sodium-native": "^2.2.3",
     "uuid-random": "^1.0.6"
