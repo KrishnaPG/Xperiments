@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "set NODE_ENV=dev& nodemon --max_old_space_size=100 --inspect=0.0.0.0:9252 ./index.js",
-    "debug": "set NODE_ENV=dev& set DEBUG=* & nodemon --inspect-brk=9252 ./index.js"
+    "debug": "set NODE_ENV=dev& set DEBUG=* & nodemon --inspect-brk=9252 ./hswarm-dht-client.mjs"
   },
   "author": "",
   "license": "ISC",
@@ -15,7 +15,7 @@
     "pino-pretty": "^2.5.0"
   },
   "dependencies": {
-    "@hyperswarm/dht": "^3.0.1",
+    "@hyperswarm/dht": "^5.0.17",
     "@hyperswarm/discovery": "^1.7.0",
     "@hyperswarm/network": "1.1.2",
     "bittorrent-dht": "^9.0.3",
