@@ -37,7 +37,7 @@
     "helmet": "^3.23.0",
     "lodash.merge": "^4.6.2",
     "mailchecker": "^3.3.9",
-    "moment": "^2.26.0",
+    "moment": "^2.29.2",
     "mongoose": "^5.9.18",
     "nodemailer": "^6.4.8",
     "passport": "^0.4.1",
